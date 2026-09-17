@@ -1,0 +1,40 @@
+{"category": "behavior", "id": "actor:ai-agent", "path": ".knowledge/actor/ai-agent.md", "role": "supporting", "title": "AI Agent", "type": "actor"}
+{"category": "behavior", "id": "actor:collaborator", "path": ".knowledge/actor/collaborator.md", "role": "supporting", "title": "Collaborator", "type": "actor"}
+{"category": "behavior", "id": "actor:diagram-author", "path": ".knowledge/actor/diagram-author.md", "role": "supporting", "title": "Diagram Author", "type": "actor"}
+{"category": "interface", "id": "api:ai-tool-surface", "path": ".knowledge/api/ai-tool-surface.md", "role": "primary", "title": "AI Tool Surface", "type": "api"}
+{"category": "interface", "id": "api:collaboration-gateway", "path": ".knowledge/api/collaboration-gateway.md", "role": "primary", "title": "Collaboration Gateway", "type": "api"}
+{"category": "structure", "id": "data:c4-project", "path": ".knowledge/data/c4-project.md", "role": "supporting", "title": "C4 Project Model", "type": "data"}
+{"category": "structure", "id": "data:collaboration-session", "path": ".knowledge/data/collaboration-session.md", "role": "supporting", "title": "Collaboration Session", "type": "data"}
+{"category": "structure", "id": "data:edit-operation", "path": ".knowledge/data/edit-operation.md", "role": "supporting", "title": "Edit Operation", "type": "data"}
+{"category": "structure", "id": "data:webmcp-tool-contract", "path": ".knowledge/data/webmcp-tool-contract.md", "role": "supporting", "title": "WebMCP Tool Contract", "type": "data"}
+{"category": "constraint", "id": "decision:static-first-architecture", "path": ".knowledge/decision/static-first-architecture.md", "role": "supporting", "title": "Static-First Architecture", "type": "decision"}
+{"category": "constraint", "id": "decision:webmcp-compatibility", "path": ".knowledge/decision/webmcp-compatibility.md", "role": "supporting", "title": "WebMCP Compatibility Strategy", "type": "decision"}
+{"category": "behavior", "id": "flow:ai-assisted-editing", "path": ".knowledge/flow/ai-assisted-editing.md", "role": "primary", "title": "AI-Assisted Editing Flow", "type": "flow"}
+{"category": "behavior", "id": "flow:collaborative-editing", "path": ".knowledge/flow/collaborative-editing.md", "role": "primary", "title": "Collaborative Editing Flow", "type": "flow"}
+{"category": "behavior", "id": "flow:hierarchical-navigation", "path": ".knowledge/flow/hierarchical-navigation.md", "role": "primary", "title": "Hierarchical Diagram Navigation", "type": "flow"}
+{"category": "behavior", "id": "flow:single-user-editing", "path": ".knowledge/flow/single-user-editing.md", "role": "primary", "title": "Single-User Editing Flow", "type": "flow"}
+{"category": "objective", "id": "requirement:ai-assisted-editing", "path": ".knowledge/requirement/ai-assisted-editing.md", "role": "primary", "title": "AI-Assisted Editing Through WebMCP", "type": "requirement"}
+{"category": "objective", "id": "requirement:boundary-resizing", "path": ".knowledge/requirement/boundary-resizing.md", "role": "primary", "title": "Resize System Boundaries", "type": "requirement"}
+{"category": "objective", "id": "requirement:browser-editing", "path": ".knowledge/requirement/browser-editing.md", "role": "primary", "title": "Browser Editing Without a Backend", "type": "requirement"}
+{"category": "objective", "id": "requirement:container-types", "path": ".knowledge/requirement/container-types.md", "role": "primary", "title": "Classify Application and Data Store Containers", "type": "requirement"}
+{"category": "objective", "id": "requirement:diagram-export-formats", "path": ".knowledge/requirement/diagram-export-formats.md", "role": "primary", "title": "Export Diagrams to Common Formats", "type": "requirement"}
+{"category": "objective", "id": "requirement:drag-layout-editing", "path": ".knowledge/requirement/drag-layout-editing.md", "role": "primary", "title": "Drag Diagram Elements", "type": "requirement"}
+{"category": "objective", "id": "requirement:external-context-visibility", "path": ".knowledge/requirement/external-context-visibility.md", "role": "primary", "title": "Show External Context in Nested Views", "type": "requirement"}
+{"category": "objective", "id": "requirement:hierarchical-modeling", "path": ".knowledge/requirement/hierarchical-modeling.md", "role": "primary", "title": "Hierarchical C4 Modeling", "type": "requirement"}
+{"category": "objective", "id": "requirement:optional-collaboration", "path": ".knowledge/requirement/optional-collaboration.md", "role": "primary", "title": "Optional Real-Time Collaboration", "type": "requirement"}
+{"category": "objective", "id": "requirement:project-portability", "path": ".knowledge/requirement/project-portability.md", "role": "primary", "title": "Portable Project Files", "type": "requirement"}
+{"category": "objective", "id": "requirement:three-c4-layers", "path": ".knowledge/requirement/three-c4-layers.md", "role": "primary", "title": "Support the Top Three C4 Layers", "type": "requirement"}
+{"category": "objective", "id": "requirement:validation-and-export", "path": ".knowledge/requirement/validation-and-export.md", "role": "primary", "title": "Validation and Diagram Export", "type": "requirement"}
+{"category": "objective", "id": "requirement:webmcp-edit-logging", "path": ".knowledge/requirement/webmcp-edit-logging.md", "role": "primary", "title": "Log WebMCP Edits", "type": "requirement"}
+{"category": "constraint", "id": "rule:ai-change-consent", "path": ".knowledge/rule/ai-change-consent.md", "role": "supporting", "title": "AI Change Consent", "type": "rule"}
+{"category": "constraint", "id": "rule:c4-model-integrity", "path": ".knowledge/rule/c4-model-integrity.md", "role": "supporting", "title": "C4 Model Integrity", "type": "rule"}
+{"category": "constraint", "id": "rule:external-context-boundary", "path": ".knowledge/rule/external-context-boundary.md", "role": "supporting", "title": "External Context and System Boundary", "type": "rule"}
+{"category": "constraint", "id": "rule:hierarchical-navigation", "path": ".knowledge/rule/hierarchical-navigation.md", "role": "supporting", "title": "Hierarchical Navigation and Shared Identity", "type": "rule"}
+{"category": "constraint", "id": "rule:nested-relationship-projection", "path": ".knowledge/rule/nested-relationship-projection.md", "role": "supporting", "title": "Project Relationships Into Nested Views", "type": "rule"}
+{"category": "external", "id": "system:collaboration-service", "path": ".knowledge/system/collaboration-service.md", "role": "supporting", "title": "Optional Collaboration Service", "type": "system"}
+{"category": "external", "id": "system:github-pages-host", "path": ".knowledge/system/github-pages-host.md", "role": "supporting", "title": "GitHub Pages Host", "type": "system"}
+{"category": "vocabulary", "id": "term:c4-diagram-level", "path": ".knowledge/term/c4-diagram-level.md", "role": "supporting", "title": "C4 Diagram Level", "type": "term"}
+{"category": "vocabulary", "id": "term:container-types", "path": ".knowledge/term/container-types.md", "role": "supporting", "title": "C4 Container Types", "type": "term"}
+{"category": "vocabulary", "id": "term:webmcp-integration", "path": ".knowledge/term/webmcp-integration.md", "role": "supporting", "title": "WebMCP Integration", "type": "term"}
+{"category": "interface", "id": "ui:diagram-editor", "path": ".knowledge/ui/diagram-editor.md", "role": "primary", "title": "Diagram Editor UI", "type": "ui"}
+{"category": "objective", "id": "vision:c4-modeling-workbench", "path": ".knowledge/vision/c4-modeling-workbench.md", "role": "primary", "title": "Browser C4 Modeling Workbench", "type": "vision"}
