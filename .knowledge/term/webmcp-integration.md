@@ -12,4 +12,5 @@ tool_kinds:
   - consequential mutation
 compatibility: feature_detect and provide an in-app command fallback
 caveat: WebMCP is an evolving browser API and must not be the only editor path
+sibling: api:mcp-server exposes the same tools to external agents through system:bun-server
 ```

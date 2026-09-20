@@ -3,7 +3,7 @@ id: requirement:ai-assisted-editing
 type: requirement
 title: AI-Assisted Editing Through WebMCP
 ---
-The editor must expose enough typed operations for an AI agent to inspect, propose, validate, and apply bounded edits inside the same web interface.
+The editor must expose enough typed operations for an AI agent to inspect, validate, and apply edits directly inside the same web interface, as one more editor.
 
 ```yaml
 priority: v1
@@ -25,7 +25,8 @@ mutation_tools:
   - apply_operation_batch
 acceptance:
   - tools describe inputs and results with typed schemas
-  - mutation calls produce a previewable change set
+  - mutation calls apply immediately through the validated command path and appear in history with AI attribution
+  - a batch call undoes as one step
   - AI targets canonical element ids when entering scopes or renaming
   - accepted AI changes use the same local command model as human edits
   - AI origin is visible and recorded in data:edit-operation

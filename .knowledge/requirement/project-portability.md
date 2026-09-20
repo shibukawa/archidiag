@@ -8,7 +8,7 @@ The editor must let users export and import a versioned project file so work is 
 ```yaml
 priority: mvp
 acceptance:
-  - export data:c4-project as a versioned JSON file
+  - export data:c4-project as a versioned JSON file, or as a YAML folder archive (decision:yaml-on-disk-json-in-browser)
   - import valid files with a preview of project metadata
   - reject invalid files with actionable messages
   - preserve stable ids, relationships, and layout through round trip

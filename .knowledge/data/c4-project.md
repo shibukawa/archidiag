@@ -3,35 +3,53 @@ id: data:c4-project
 type: data
 title: C4 Project Model
 ---
-The C4 project model is a portable document with one canonical hierarchy that is rendered through context, container, and component diagram views.
+The C4 project model is a portable document with one canonical hierarchy, a project vocabulary, a domain dictionary, and diagram views of every kind in term:diagram-family.
 
 ```yaml
 required:
   project_id: stable id
-  schema_version: explicit version
+  schema_version: integer version of the data format (decision:project-schema-versioning)
   model_tree:
     roots: people, software systems, external systems
     children: software system -> containers -> components
-  diagrams:
+    data_store_children: database or database_schema container -> independent entities -> dependent entities (data:entity)
+  vocabulary: data:vocabulary-entry records (requirement:vocabulary-dictionary)
+  naming_policy: rule:physical-naming-policy selection and suggestion provider setting
+  languages: business_language, system_language (requirement:ui-localization)
+  style_theme: data:style-theme selection or customized copy
+  domains: data:data-domain records (requirement:domain-dictionary)
+  groups: data:group records (requirement:element-groups)
+  perspectives: data:perspective and data:perspective-note records (requirement:perspectives)
+  checks: data:check-profile ladder, custom data:check-item instances, active_profile_id (requirement:configurable-model-checks)
+  diagrams: data:diagram-view records; many per scope and kind, one default each
     - id
-      level: context | container | component
+      kind: c4_context | c4_container | c4_component | erd_component | erd_code | dfd_context | dfd_container | dfd_component
       scope_id: owning canonical element id or project root
-      element_refs: canonical element ids
-      relationships
+      name, is_default
+      element_refs: subset of the scope's elements; empty means all
+      use_case: dfd_* kinds only
+      dfd_payload: nodes and flows per data:dfd-model when kind is dfd_*
 elements:
-  fields: id, kind, parent_id, name, description, technology, tags, container_category, data_store_kind
+  fields: id, kind, parent_id, group_id, name, name_binding, description, technology, container_category, data_store_kind, sql_dialect, classification, attributes
+  no_tags: free-form tags are not a field; use data:group for structure and data:perspective for cross-cutting labels
+  kinds: person | software_system | external_system | container | component | entity
   identity: one canonical record is referenced by every diagram view
   container_taxonomy:
     categories: application | data_store
-    data_store_kinds: database | database_schema | pubsub | other
+    application_kinds: web_browser | mobile_app | desktop_app | server | worker | other
+    data_store_kinds: database | database_schema | pubsub | queue | bucket | cache | file_share | other
     rule: data_store_kind is required when container_category is data_store
+    sql_dialect: postgresql | sqlite | mysql for database and database_schema containers; drives requirement:sql-ddl-export
 relationships:
   fields: id, source_id, target_id, description, technology, direction
   view_projection: optional per-level endpoint mapping for nested diagrams
+entity_relationships: data:entity-relationship records scoped to one data store
 layout:
-  fields: diagram_id, element_id, position, size, style, boundary
-rename_behavior: update the canonical element name; all references and views resolve the new name
+  fields: diagram_id, element_id, position, size, style, boundary, collapsed
+rename_behavior: update the canonical element or vocabulary entry once; every C4, ERD, and DFD view resolves the new name
+migration: files without kind default each diagram to its c4 level kind (a data store scope becomes erd_component) and start with empty vocabulary, domain, entity, DFD, group, and perspective sets
 portable_formats:
-  - JSON project file
+  - JSON project file; YAML folder on disk (decision:yaml-on-disk-json-in-browser)
   - rendered diagram export: pdf, drawio, png, svg
+  - DDL per data store dialect (requirement:sql-ddl-export)
 ```

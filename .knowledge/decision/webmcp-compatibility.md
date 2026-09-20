@@ -9,7 +9,7 @@ Treat WebMCP as progressive enhancement: detect the available browser API, regis
 implementation:
   preferred_surface: document.modelContext
   registration: lifecycle-scoped and abortable
-  exposure: read_only inspection plus guarded mutations
+  exposure: read_only inspection plus direct mutations with attribution
 fallbacks:
   - command palette
   - importable operation file

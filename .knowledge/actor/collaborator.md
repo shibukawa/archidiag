@@ -9,4 +9,6 @@ The collaborator edits the same project in a shared session and needs visible pr
 uses:
   - requirement:optional-collaboration
   - data:collaboration-session
+  - rule:undo-scope
+  - decision:shared-mode-roles
 ```

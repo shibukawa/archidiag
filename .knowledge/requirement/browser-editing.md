@@ -9,7 +9,7 @@ A user must be able to use the core editor on a static host without login, serve
 priority: mvp
 acceptance:
   - load the app from static assets
-  - create and edit a project after page load
+  - create and edit a project after page load with every modeling feature: C4, ERD, DFD, vocabulary, domains, groups, perspectives, checks, and export
   - preserve work during normal reload through local browser persistence
   - show clear storage limits and recovery actions
   - degrade gracefully when browser storage is unavailable

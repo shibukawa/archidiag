@@ -13,7 +13,13 @@ projection:
 example:
   context: Customer -> Commerce Platform
   container: Customer -> Web Application
+merging:
+  one_line_per_pair: several relationships between the same two visible nodes in the same direction draw as one line; their labels stack one per line and technologies join with a slash
+  selection: clicking the line selects the first relationship; the inspector lists the others folded into it
+  opposite_directions: two lines, one per direction
 boundary:
-  endpoint: forbidden
-  fallback: omit the relationship when no visible endpoint can be resolved
+  pending: a relationship whose endpoint is the scope element itself is not drawn, but its other end stays in the view and is placed left when it sends and right when it receives, so nothing from the parent view disappears
+  assignment: the inspector assigns the endpoint to a child of the scope for this level (viewEndpoints); the parent view keeps its own endpoints
+  check: c4.relationship_assigned_in_child_view reports pending edges once the child view exists (warning by default, error when export ready)
+  fallback: omit the relationship only when no visible endpoint and no boundary can be resolved
 ```

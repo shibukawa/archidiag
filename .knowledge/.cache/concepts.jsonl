@@ -3,38 +3,139 @@
 {"category": "behavior", "id": "actor:diagram-author", "path": ".knowledge/actor/diagram-author.md", "role": "supporting", "title": "Diagram Author", "type": "actor"}
 {"category": "interface", "id": "api:ai-tool-surface", "path": ".knowledge/api/ai-tool-surface.md", "role": "primary", "title": "AI Tool Surface", "type": "api"}
 {"category": "interface", "id": "api:collaboration-gateway", "path": ".knowledge/api/collaboration-gateway.md", "role": "primary", "title": "Collaboration Gateway", "type": "api"}
+{"category": "interface", "id": "api:mcp-server", "path": ".knowledge/api/mcp-server.md", "role": "primary", "title": "MCP Server", "type": "api"}
+{"category": "structure", "id": "data:attribute", "path": ".knowledge/data/attribute.md", "role": "supporting", "title": "Attribute", "type": "data"}
 {"category": "structure", "id": "data:c4-project", "path": ".knowledge/data/c4-project.md", "role": "supporting", "title": "C4 Project Model", "type": "data"}
+{"category": "structure", "id": "data:check-item", "path": ".knowledge/data/check-item.md", "role": "supporting", "title": "Check Item", "type": "data"}
+{"category": "structure", "id": "data:check-profile", "path": ".knowledge/data/check-profile.md", "role": "supporting", "title": "Check Profile", "type": "data"}
+{"category": "structure", "id": "data:code-set", "path": ".knowledge/data/code-set.md", "role": "supporting", "title": "Code Set", "type": "data"}
 {"category": "structure", "id": "data:collaboration-session", "path": ".knowledge/data/collaboration-session.md", "role": "supporting", "title": "Collaboration Session", "type": "data"}
+{"category": "structure", "id": "data:data-domain", "path": ".knowledge/data/data-domain.md", "role": "supporting", "title": "Data Domain", "type": "data"}
+{"category": "structure", "id": "data:dfd-diagram-ref", "path": ".knowledge/data/dfd-diagram-ref.md", "role": "supporting", "title": "DFD Diagram Reference", "type": "data"}
+{"category": "structure", "id": "data:dfd-intermediate-data", "path": ".knowledge/data/dfd-intermediate-data.md", "role": "supporting", "title": "DFD Intermediate Data", "type": "data"}
+{"category": "structure", "id": "data:dfd-model", "path": ".knowledge/data/dfd-model.md", "role": "supporting", "title": "DFD Model", "type": "data"}
+{"category": "structure", "id": "data:dfd-transaction-boundary", "path": ".knowledge/data/dfd-transaction-boundary.md", "role": "supporting", "title": "DFD Transaction Boundary", "type": "data"}
+{"category": "structure", "id": "data:diagram-legend", "path": ".knowledge/data/diagram-legend.md", "role": "supporting", "title": "Diagram Legend", "type": "data"}
+{"category": "structure", "id": "data:diagram-view", "path": ".knowledge/data/diagram-view.md", "role": "supporting", "title": "Diagram View", "type": "data"}
+{"category": "structure", "id": "data:domain-component", "path": ".knowledge/data/domain-component.md", "role": "supporting", "title": "Domain Component", "type": "data"}
 {"category": "structure", "id": "data:edit-operation", "path": ".knowledge/data/edit-operation.md", "role": "supporting", "title": "Edit Operation", "type": "data"}
+{"category": "structure", "id": "data:element-usage", "path": ".knowledge/data/element-usage.md", "role": "supporting", "title": "Element Usage", "type": "data"}
+{"category": "structure", "id": "data:entity-relationship", "path": ".knowledge/data/entity-relationship.md", "role": "supporting", "title": "Entity Relationship", "type": "data"}
+{"category": "structure", "id": "data:entity", "path": ".knowledge/data/entity.md", "role": "supporting", "title": "Entity", "type": "data"}
+{"category": "structure", "id": "data:erd-model", "path": ".knowledge/data/erd-model.md", "role": "supporting", "title": "ERD Scope Structure", "type": "data"}
+{"category": "structure", "id": "data:group", "path": ".knowledge/data/group.md", "role": "supporting", "title": "Group", "type": "data"}
+{"category": "structure", "id": "data:name-suggestion", "path": ".knowledge/data/name-suggestion.md", "role": "supporting", "title": "Name Suggestion", "type": "data"}
+{"category": "structure", "id": "data:perspective-note", "path": ".knowledge/data/perspective-note.md", "role": "supporting", "title": "Perspective Note", "type": "data"}
+{"category": "structure", "id": "data:perspective", "path": ".knowledge/data/perspective.md", "role": "supporting", "title": "Perspective", "type": "data"}
+{"category": "structure", "id": "data:primitive-type", "path": ".knowledge/data/primitive-type.md", "role": "supporting", "title": "Primitive Type", "type": "data"}
+{"category": "structure", "id": "data:project-store", "path": ".knowledge/data/project-store.md", "role": "supporting", "title": "Project Store", "type": "data"}
+{"category": "structure", "id": "data:review-thread", "path": ".knowledge/data/review-thread.md", "role": "supporting", "title": "Review Thread", "type": "data"}
+{"category": "structure", "id": "data:sql-dialect-mapping", "path": ".knowledge/data/sql-dialect-mapping.md", "role": "supporting", "title": "SQL Dialect Mapping", "type": "data"}
+{"category": "structure", "id": "data:starter-project", "path": ".knowledge/data/starter-project.md", "role": "supporting", "title": "Starter Project", "type": "data"}
+{"category": "structure", "id": "data:style-theme", "path": ".knowledge/data/style-theme.md", "role": "supporting", "title": "Style Theme", "type": "data"}
+{"category": "structure", "id": "data:vocabulary-binding", "path": ".knowledge/data/vocabulary-binding.md", "role": "supporting", "title": "Vocabulary Binding", "type": "data"}
+{"category": "structure", "id": "data:vocabulary-entry", "path": ".knowledge/data/vocabulary-entry.md", "role": "supporting", "title": "Vocabulary Entry", "type": "data"}
 {"category": "structure", "id": "data:webmcp-tool-contract", "path": ".knowledge/data/webmcp-tool-contract.md", "role": "supporting", "title": "WebMCP Tool Contract", "type": "data"}
+{"category": "constraint", "id": "decision:c4-supplementary-diagrams", "path": ".knowledge/decision/c4-supplementary-diagrams.md", "role": "supporting", "title": "C4 Supplementary Diagrams", "type": "decision"}
+{"category": "constraint", "id": "decision:checks-over-maturity", "path": ".knowledge/decision/checks-over-maturity.md", "role": "supporting", "title": "Configurable Checks Instead of Maturity Scores", "type": "decision"}
+{"category": "constraint", "id": "decision:context-level-dfd", "path": ".knowledge/decision/context-level-dfd.md", "role": "supporting", "title": "Context-Level DFD", "type": "decision"}
+{"category": "constraint", "id": "decision:diagram-kind-extension", "path": ".knowledge/decision/diagram-kind-extension.md", "role": "supporting", "title": "Extend Diagrams by Kind, Not by Separate Projects", "type": "decision"}
+{"category": "constraint", "id": "decision:field-first-domains", "path": ".knowledge/decision/field-first-domains.md", "role": "supporting", "title": "Field-First Domains", "type": "decision"}
+{"category": "constraint", "id": "decision:no-credentials-in-browser", "path": ".knowledge/decision/no-credentials-in-browser.md", "role": "supporting", "title": "No LLM Credentials in the Browser", "type": "decision"}
+{"category": "constraint", "id": "decision:no-logical-physical-split", "path": ".knowledge/decision/no-logical-physical-split.md", "role": "supporting", "title": "No Logical/Physical Split", "type": "decision"}
+{"category": "constraint", "id": "decision:no-whole-project-diagram", "path": ".knowledge/decision/no-whole-project-diagram.md", "role": "supporting", "title": "No Whole-Project Diagram", "type": "decision"}
+{"category": "constraint", "id": "decision:postgresql-canonical-types", "path": ".knowledge/decision/postgresql-canonical-types.md", "role": "supporting", "title": "PostgreSQL as Canonical Type System", "type": "decision"}
+{"category": "constraint", "id": "decision:project-schema-versioning", "path": ".knowledge/decision/project-schema-versioning.md", "role": "supporting", "title": "Project Schema Versioning", "type": "decision"}
+{"category": "constraint", "id": "decision:review-comments-separate", "path": ".knowledge/decision/review-comments-separate.md", "role": "supporting", "title": "Review Comments Outside the Model", "type": "decision"}
+{"category": "constraint", "id": "decision:server-authority-when-present", "path": ".knowledge/decision/server-authority-when-present.md", "role": "supporting", "title": "Server Authority When Present", "type": "decision"}
+{"category": "constraint", "id": "decision:shared-mode-roles", "path": ".knowledge/decision/shared-mode-roles.md", "role": "supporting", "title": "Shared-Mode Roles and Authentication", "type": "decision"}
+{"category": "constraint", "id": "decision:shared-typescript-core", "path": ".knowledge/decision/shared-typescript-core.md", "role": "supporting", "title": "Shared TypeScript Core", "type": "decision"}
 {"category": "constraint", "id": "decision:static-first-architecture", "path": ".knowledge/decision/static-first-architecture.md", "role": "supporting", "title": "Static-First Architecture", "type": "decision"}
+{"category": "constraint", "id": "decision:status-and-classification-as-perspectives", "path": ".knowledge/decision/status-and-classification-as-perspectives.md", "role": "supporting", "title": "Status and Classification as Valued Perspectives", "type": "decision"}
+{"category": "constraint", "id": "decision:vocabulary-binding-scope", "path": ".knowledge/decision/vocabulary-binding-scope.md", "role": "supporting", "title": "Vocabulary Binding Scope", "type": "decision"}
 {"category": "constraint", "id": "decision:webmcp-compatibility", "path": ".knowledge/decision/webmcp-compatibility.md", "role": "supporting", "title": "WebMCP Compatibility Strategy", "type": "decision"}
+{"category": "constraint", "id": "decision:yaml-on-disk-json-in-browser", "path": ".knowledge/decision/yaml-on-disk-json-in-browser.md", "role": "supporting", "title": "YAML on Disk, JSON in Browser", "type": "decision"}
 {"category": "behavior", "id": "flow:ai-assisted-editing", "path": ".knowledge/flow/ai-assisted-editing.md", "role": "primary", "title": "AI-Assisted Editing Flow", "type": "flow"}
 {"category": "behavior", "id": "flow:collaborative-editing", "path": ".knowledge/flow/collaborative-editing.md", "role": "primary", "title": "Collaborative Editing Flow", "type": "flow"}
+{"category": "behavior", "id": "flow:dfd-authoring", "path": ".knowledge/flow/dfd-authoring.md", "role": "primary", "title": "DFD Authoring Flow", "type": "flow"}
+{"category": "behavior", "id": "flow:domain-lifecycle", "path": ".knowledge/flow/domain-lifecycle.md", "role": "primary", "title": "Domain Lifecycle from Field to DDL", "type": "flow"}
+{"category": "behavior", "id": "flow:erd-authoring", "path": ".knowledge/flow/erd-authoring.md", "role": "primary", "title": "ERD Authoring Flow", "type": "flow"}
 {"category": "behavior", "id": "flow:hierarchical-navigation", "path": ".knowledge/flow/hierarchical-navigation.md", "role": "primary", "title": "Hierarchical Diagram Navigation", "type": "flow"}
 {"category": "behavior", "id": "flow:single-user-editing", "path": ".knowledge/flow/single-user-editing.md", "role": "primary", "title": "Single-User Editing Flow", "type": "flow"}
 {"category": "objective", "id": "requirement:ai-assisted-editing", "path": ".knowledge/requirement/ai-assisted-editing.md", "role": "primary", "title": "AI-Assisted Editing Through WebMCP", "type": "requirement"}
+{"category": "objective", "id": "requirement:auto-layout", "path": ".knowledge/requirement/auto-layout.md", "role": "primary", "title": "Automatic Layout", "type": "requirement"}
 {"category": "objective", "id": "requirement:boundary-resizing", "path": ".knowledge/requirement/boundary-resizing.md", "role": "primary", "title": "Resize System Boundaries", "type": "requirement"}
 {"category": "objective", "id": "requirement:browser-editing", "path": ".knowledge/requirement/browser-editing.md", "role": "primary", "title": "Browser Editing Without a Backend", "type": "requirement"}
+{"category": "objective", "id": "requirement:bun-backend", "path": ".knowledge/requirement/bun-backend.md", "role": "primary", "title": "Optional Bun Backend", "type": "requirement"}
+{"category": "objective", "id": "requirement:canvas-quick-create", "path": ".knowledge/requirement/canvas-quick-create.md", "role": "primary", "title": "Canvas Quick Create", "type": "requirement"}
+{"category": "objective", "id": "requirement:configurable-model-checks", "path": ".knowledge/requirement/configurable-model-checks.md", "role": "primary", "title": "Configurable Cross-Diagram Checks", "type": "requirement"}
 {"category": "objective", "id": "requirement:container-types", "path": ".knowledge/requirement/container-types.md", "role": "primary", "title": "Classify Application and Data Store Containers", "type": "requirement"}
+{"category": "objective", "id": "requirement:crud-matrix", "path": ".knowledge/requirement/crud-matrix.md", "role": "primary", "title": "CRUD Matrix from DFD Operations", "type": "requirement"}
+{"category": "objective", "id": "requirement:data-classification", "path": ".knowledge/requirement/data-classification.md", "role": "primary", "title": "Attribute-Level Data Classification", "type": "requirement"}
+{"category": "objective", "id": "requirement:deep-links", "path": ".knowledge/requirement/deep-links.md", "role": "primary", "title": "Deep Links and Embedding", "type": "requirement"}
+{"category": "objective", "id": "requirement:deployment-diagram", "path": ".knowledge/requirement/deployment-diagram.md", "role": "primary", "title": "Deployment Diagram", "type": "requirement"}
+{"category": "objective", "id": "requirement:description-display", "path": ".knowledge/requirement/description-display.md", "role": "primary", "title": "Descriptions on Every Diagram Item", "type": "requirement"}
 {"category": "objective", "id": "requirement:diagram-export-formats", "path": ".knowledge/requirement/diagram-export-formats.md", "role": "primary", "title": "Export Diagrams to Common Formats", "type": "requirement"}
+{"category": "objective", "id": "requirement:document-bundle-export", "path": ".knowledge/requirement/document-bundle-export.md", "role": "primary", "title": "Project Document Bundle Export", "type": "requirement"}
+{"category": "objective", "id": "requirement:domain-consolidation", "path": ".knowledge/requirement/domain-consolidation.md", "role": "primary", "title": "Field Name as Domain, Consolidated Later", "type": "requirement"}
+{"category": "objective", "id": "requirement:domain-dictionary", "path": ".knowledge/requirement/domain-dictionary.md", "role": "primary", "title": "Project Domain Dictionary", "type": "requirement"}
 {"category": "objective", "id": "requirement:drag-layout-editing", "path": ".knowledge/requirement/drag-layout-editing.md", "role": "primary", "title": "Drag Diagram Elements", "type": "requirement"}
+{"category": "objective", "id": "requirement:element-analysis-view", "path": ".knowledge/requirement/element-analysis-view.md", "role": "primary", "title": "Cross-Diagram Element Analysis", "type": "requirement"}
+{"category": "objective", "id": "requirement:element-groups", "path": ".knowledge/requirement/element-groups.md", "role": "primary", "title": "Group Elements Inside a Scope", "type": "requirement"}
+{"category": "objective", "id": "requirement:element-lifecycle-status", "path": ".knowledge/requirement/element-lifecycle-status.md", "role": "primary", "title": "Existing, Planned, and Deprecated Status", "type": "requirement"}
+{"category": "objective", "id": "requirement:erd-in-data-store", "path": ".knowledge/requirement/erd-in-data-store.md", "role": "primary", "title": "ERD as Data Store Component and Code Views", "type": "requirement"}
 {"category": "objective", "id": "requirement:external-context-visibility", "path": ".knowledge/requirement/external-context-visibility.md", "role": "primary", "title": "Show External Context in Nested Views", "type": "requirement"}
+{"category": "objective", "id": "requirement:headless-cli", "path": ".knowledge/requirement/headless-cli.md", "role": "primary", "title": "Headless CLI and Agent Skill", "type": "requirement"}
 {"category": "objective", "id": "requirement:hierarchical-modeling", "path": ".knowledge/requirement/hierarchical-modeling.md", "role": "primary", "title": "Hierarchical C4 Modeling", "type": "requirement"}
+{"category": "objective", "id": "requirement:layout-helpers", "path": ".knowledge/requirement/layout-helpers.md", "role": "primary", "title": "Manual Layout Helpers", "type": "requirement"}
+{"category": "objective", "id": "requirement:mcp-server-access", "path": ".knowledge/requirement/mcp-server-access.md", "role": "primary", "title": "MCP Server Access for External Agents", "type": "requirement"}
+{"category": "objective", "id": "requirement:multi-diagram-project", "path": ".knowledge/requirement/multi-diagram-project.md", "role": "primary", "title": "One Model, Multiple Diagram Families", "type": "requirement"}
+{"category": "objective", "id": "requirement:multiple-views-per-scope", "path": ".knowledge/requirement/multiple-views-per-scope.md", "role": "primary", "title": "Multiple Views per Scope", "type": "requirement"}
+{"category": "objective", "id": "requirement:name-display-switching", "path": ".knowledge/requirement/name-display-switching.md", "role": "primary", "title": "Name Display Switching", "type": "requirement"}
+{"category": "objective", "id": "requirement:name-suggestion", "path": ".knowledge/requirement/name-suggestion.md", "role": "primary", "title": "Japanese-to-English Name Suggestion", "type": "requirement"}
 {"category": "objective", "id": "requirement:optional-collaboration", "path": ".knowledge/requirement/optional-collaboration.md", "role": "primary", "title": "Optional Real-Time Collaboration", "type": "requirement"}
+{"category": "objective", "id": "requirement:perspective-view", "path": ".knowledge/requirement/perspective-view.md", "role": "primary", "title": "Perspective Dashboard View", "type": "requirement"}
+{"category": "objective", "id": "requirement:perspectives", "path": ".knowledge/requirement/perspectives.md", "role": "primary", "title": "Cross-Cutting Perspectives", "type": "requirement"}
+{"category": "objective", "id": "requirement:project-catalogs", "path": ".knowledge/requirement/project-catalogs.md", "role": "primary", "title": "Project-Wide Catalogs", "type": "requirement"}
 {"category": "objective", "id": "requirement:project-portability", "path": ".knowledge/requirement/project-portability.md", "role": "primary", "title": "Portable Project Files", "type": "requirement"}
+{"category": "objective", "id": "requirement:review-comments", "path": ".knowledge/requirement/review-comments.md", "role": "primary", "title": "Review Comment Threads", "type": "requirement"}
+{"category": "objective", "id": "requirement:sql-ddl-export", "path": ".knowledge/requirement/sql-ddl-export.md", "role": "primary", "title": "SQL DDL Export per Data Store Dialect", "type": "requirement"}
+{"category": "objective", "id": "requirement:starter-projects", "path": ".knowledge/requirement/starter-projects.md", "role": "primary", "title": "Starter and Sample Projects", "type": "requirement"}
 {"category": "objective", "id": "requirement:three-c4-layers", "path": ".knowledge/requirement/three-c4-layers.md", "role": "primary", "title": "Support the Top Three C4 Layers", "type": "requirement"}
+{"category": "objective", "id": "requirement:ui-localization", "path": ".knowledge/requirement/ui-localization.md", "role": "primary", "title": "UI Localization and Language Separation", "type": "requirement"}
+{"category": "objective", "id": "requirement:use-case-dfd", "path": ".knowledge/requirement/use-case-dfd.md", "role": "primary", "title": "Use-Case Data Flow Diagrams Paired with C4 Levels", "type": "requirement"}
 {"category": "objective", "id": "requirement:validation-and-export", "path": ".knowledge/requirement/validation-and-export.md", "role": "primary", "title": "Validation and Diagram Export", "type": "requirement"}
+{"category": "objective", "id": "requirement:vocabulary-dictionary", "path": ".knowledge/requirement/vocabulary-dictionary.md", "role": "primary", "title": "Project Vocabulary Dictionary", "type": "requirement"}
 {"category": "objective", "id": "requirement:webmcp-edit-logging", "path": ".knowledge/requirement/webmcp-edit-logging.md", "role": "primary", "title": "Log WebMCP Edits", "type": "requirement"}
-{"category": "constraint", "id": "rule:ai-change-consent", "path": ".knowledge/rule/ai-change-consent.md", "role": "supporting", "title": "AI Change Consent", "type": "rule"}
+{"category": "constraint", "id": "rule:ai-change-consent", "path": ".knowledge/rule/ai-change-consent.md", "role": "supporting", "title": "AI Edits Without Approval Gates", "type": "rule"}
 {"category": "constraint", "id": "rule:c4-model-integrity", "path": ".knowledge/rule/c4-model-integrity.md", "role": "supporting", "title": "C4 Model Integrity", "type": "rule"}
+{"category": "constraint", "id": "rule:check-evaluation", "path": ".knowledge/rule/check-evaluation.md", "role": "supporting", "title": "Check Evaluation", "type": "rule"}
+{"category": "constraint", "id": "rule:classification-propagation", "path": ".knowledge/rule/classification-propagation.md", "role": "supporting", "title": "Data Classification Propagation", "type": "rule"}
+{"category": "constraint", "id": "rule:dfd-c4-pairing", "path": ".knowledge/rule/dfd-c4-pairing.md", "role": "supporting", "title": "DFD and C4 Pairing", "type": "rule"}
+{"category": "constraint", "id": "rule:dfd-connection-policy", "path": ".knowledge/rule/dfd-connection-policy.md", "role": "supporting", "title": "DFD Connection Policy", "type": "rule"}
+{"category": "constraint", "id": "rule:dfd-reference-integrity", "path": ".knowledge/rule/dfd-reference-integrity.md", "role": "supporting", "title": "DFD Reference Integrity", "type": "rule"}
+{"category": "constraint", "id": "rule:diagram-frame", "path": ".knowledge/rule/diagram-frame.md", "role": "supporting", "title": "Diagram Frame with Title Block and Legend", "type": "rule"}
+{"category": "constraint", "id": "rule:diagram-styles", "path": ".knowledge/rule/diagram-styles.md", "role": "supporting", "title": "Diagram Style Themes", "type": "rule"}
+{"category": "constraint", "id": "rule:domain-expansion", "path": ".knowledge/rule/domain-expansion.md", "role": "supporting", "title": "Domain Expansion and Key Projection", "type": "rule"}
+{"category": "constraint", "id": "rule:edge-routing", "path": ".knowledge/rule/edge-routing.md", "role": "supporting", "title": "Edge Routing by Diagram Family", "type": "rule"}
+{"category": "constraint", "id": "rule:erd-scope-integrity", "path": ".knowledge/rule/erd-scope-integrity.md", "role": "supporting", "title": "ERD Scope Integrity", "type": "rule"}
 {"category": "constraint", "id": "rule:external-context-boundary", "path": ".knowledge/rule/external-context-boundary.md", "role": "supporting", "title": "External Context and System Boundary", "type": "rule"}
+{"category": "constraint", "id": "rule:group-membership", "path": ".knowledge/rule/group-membership.md", "role": "supporting", "title": "Group Membership", "type": "rule"}
 {"category": "constraint", "id": "rule:hierarchical-navigation", "path": ".knowledge/rule/hierarchical-navigation.md", "role": "supporting", "title": "Hierarchical Navigation and Shared Identity", "type": "rule"}
 {"category": "constraint", "id": "rule:nested-relationship-projection", "path": ".knowledge/rule/nested-relationship-projection.md", "role": "supporting", "title": "Project Relationships Into Nested Views", "type": "rule"}
+{"category": "constraint", "id": "rule:physical-naming-policy", "path": ".knowledge/rule/physical-naming-policy.md", "role": "supporting", "title": "Physical Naming Policy", "type": "rule"}
+{"category": "constraint", "id": "rule:undo-scope", "path": ".knowledge/rule/undo-scope.md", "role": "supporting", "title": "Undo Covers Own Operations Only", "type": "rule"}
+{"category": "constraint", "id": "rule:vocabulary-resolution", "path": ".knowledge/rule/vocabulary-resolution.md", "role": "supporting", "title": "Vocabulary Resolution", "type": "rule"}
+{"category": "external", "id": "system:bun-server", "path": ".knowledge/system/bun-server.md", "role": "supporting", "title": "Bun Server", "type": "system"}
 {"category": "external", "id": "system:collaboration-service", "path": ".knowledge/system/collaboration-service.md", "role": "supporting", "title": "Optional Collaboration Service", "type": "system"}
 {"category": "external", "id": "system:github-pages-host", "path": ".knowledge/system/github-pages-host.md", "role": "supporting", "title": "GitHub Pages Host", "type": "system"}
+{"category": "external", "id": "system:name-suggestion-provider", "path": ".knowledge/system/name-suggestion-provider.md", "role": "supporting", "title": "Name Suggestion Provider", "type": "system"}
 {"category": "vocabulary", "id": "term:c4-diagram-level", "path": ".knowledge/term/c4-diagram-level.md", "role": "supporting", "title": "C4 Diagram Level", "type": "term"}
 {"category": "vocabulary", "id": "term:container-types", "path": ".knowledge/term/container-types.md", "role": "supporting", "title": "C4 Container Types", "type": "term"}
+{"category": "vocabulary", "id": "term:dfd-notation", "path": ".knowledge/term/dfd-notation.md", "role": "supporting", "title": "DFD Notation", "type": "term"}
+{"category": "vocabulary", "id": "term:diagram-family", "path": ".knowledge/term/diagram-family.md", "role": "supporting", "title": "Diagram Family", "type": "term"}
+{"category": "vocabulary", "id": "term:erd-notation", "path": ".knowledge/term/erd-notation.md", "role": "supporting", "title": "ERD Notation", "type": "term"}
+{"category": "vocabulary", "id": "term:vocabulary", "path": ".knowledge/term/vocabulary.md", "role": "supporting", "title": "Vocabulary", "type": "term"}
 {"category": "vocabulary", "id": "term:webmcp-integration", "path": ".knowledge/term/webmcp-integration.md", "role": "supporting", "title": "WebMCP Integration", "type": "term"}
 {"category": "interface", "id": "ui:diagram-editor", "path": ".knowledge/ui/diagram-editor.md", "role": "primary", "title": "Diagram Editor UI", "type": "ui"}
 {"category": "objective", "id": "vision:c4-modeling-workbench", "path": ".knowledge/vision/c4-modeling-workbench.md", "role": "primary", "title": "Browser C4 Modeling Workbench", "type": "vision"}

@@ -11,5 +11,5 @@ requirements:
   - deterministic validation
   - idempotent application where feasible
   - undo or inverse representation
-  - origin attribution: human or AI
+  - origin attribution: user_id plus origin human | agent; an agent edit names the user it acts for
 ```

@@ -14,7 +14,7 @@ acceptance:
   - resize the current system boundary with a visible resize handle
   - auto-expand the boundary when an internal element crosses its edge
   - auto-relocate outside elements to a non-overlapping side of the boundary
-  - keep relationships attached after movement
+  - keep relationships attached after movement; ports follow rule:edge-routing for the diagram family
   - save boundary size locally per diagram view
   - save positions locally and include them in project export
   - undo and redo a completed drag as one layout operation

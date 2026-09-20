@@ -14,8 +14,9 @@ acceptance:
   - attribute accepted changes to participants
   - recover from disconnect and reconnect without silent data loss
   - enforce read_only access when the session grants it
+  - undo affects only the participant's own operations (rule:undo-scope)
 non_goals:
-  - make a specific backend vendor mandatory
+  - make a specific backend vendor mandatory; system:bun-server is the reference, the gateway stays abstract
 depends_on:
   - system:collaboration-service
   - data:collaboration-session

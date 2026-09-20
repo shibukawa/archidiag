@@ -8,7 +8,9 @@ The collaboration session binds a project to participants, revisions, presence, 
 ```yaml
 fields: session_id, project_id, participants, revision, presence, permission_policy
 participant:
-  fields: participant_id, display_name, color, role, last_seen
+  fields: participant_id, user_id, kind, display_name, color, role, last_seen
+  kind: human | agent
+  agent: acts as the user_id that attached it; role and permissions are the user's (rule:ai-change-consent)
 session_states:
   - connecting
   - connected

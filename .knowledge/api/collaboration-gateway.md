@@ -20,4 +20,5 @@ guarantees:
   - ordered or revision-addressable operations
   - server-side authorization when a service exists
   - no dependency from the static baseline on this API
+reference_implementation: system:bun-server over WebSocket; operations persist to data:project-store
 ```

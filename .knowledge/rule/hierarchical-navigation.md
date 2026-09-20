@@ -7,8 +7,13 @@ Child diagrams are navigable views of canonical parent elements, so entering a c
 
 ```yaml
 navigation:
+  target_view: the default data:diagram-view of the target scope and kind; a view switcher lists the others
   context_software_system: open container view with scope_id equal to the system id
   container_container: open component view with scope_id equal to the container id
+  container_database_store: open erd_component with scope_id equal to the container id when data_store_kind is database or database_schema (rule:erd-scope-integrity)
+  entity: open erd_code with scope_id equal to the entity id (data:entity)
+  dfd_process: open the next-level DFD of the same use case (rule:dfd-c4-pairing)
+  dfd_diagram_ref: open the referenced DFD (data:dfd-diagram-ref)
   breadcrumb: show project root and ancestor names
   back: restore the previous diagram and selection when possible
 identity:
@@ -17,4 +22,6 @@ identity:
   - rename is one model operation and invalidates affected views
 non_navigable:
   - people and external systems have no child scope by default
+  - pubsub and other data stores have no child scope
+  - entities without dependent entities open an empty erd_code view that invites adding one
 ```

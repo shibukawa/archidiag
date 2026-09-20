@@ -14,7 +14,7 @@ acceptance:
   - Component view preserves relevant inherited context and direct external dependencies
   - Customer connects to the Web Application container in the Commerce Platform Container view
   - inherited system-level relationships use explicit visible child endpoints when available
-  - the system boundary is never a relationship endpoint
+  - a relationship that stops at the scope itself is not drawn, but its other end remains in the view placed by arrow direction, and a check flags it until assigned to a child
   - unrelated external elements are not added to the view
 depends_on:
   - requirement:hierarchical-modeling

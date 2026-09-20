@@ -11,7 +11,8 @@ user_story: As an author, I double-click a software system or container to see t
 acceptance:
   - System Context shows software systems as navigable parent nodes
   - double-clicking a software system opens its container scope
-  - double-clicking a container opens its component scope
+  - double-clicking an application container opens its component scope
+  - double-clicking a database or database schema container opens erd_component, and double-clicking an entity opens erd_code (requirement:erd-in-data-store)
   - the current scope and ancestors are visible
   - back or breadcrumb navigation returns to the parent view
   - nested views retain relevant people and external systems outside the current system boundary
