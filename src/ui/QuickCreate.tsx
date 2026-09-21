@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { ApplicationKind, ContainerCategory, DataStoreKind, DiagramView, ElementKind, Group, SqlDialect } from '../core/model'
-import { APPLICATION_KINDS, DATA_STORE_KINDS, LEVEL_BY_VIEW_KIND, SQL_STORE_KINDS } from '../core/model'
+import { APPLICATION_KINDS, childKindForView, DATA_STORE_KINDS, LEVEL_BY_VIEW_KIND, SQL_STORE_KINDS } from '../core/model'
 import { RadioRow } from './Inspector'
 import type { Copy } from './i18n'
 import { Icon } from './icons'
@@ -29,7 +29,7 @@ const remembered = new Map<string, Defaults>()
 
 export function QuickCreate({ view, groups, copy, onCreate, onClose }: { view: DiagramView; groups: Group[]; copy: Copy; onCreate: (input: QuickCreateInput) => void; onClose: () => void }) {
   const level = LEVEL_BY_VIEW_KIND[view.kind]
-  const kindOptions: ElementKind[] = level === 'context' ? ['softwareSystem', 'person', 'externalSystem'] : level === 'container' ? ['container'] : ['component']
+  const kindOptions: ElementKind[] = level === 'context' ? ['softwareSystem', 'person', 'externalSystem'] : level === 'container' ? ['container'] : [childKindForView(view.kind)]
   const [defaults, setDefaults] = useState<Defaults>(() => remembered.get(view.kind) ?? { kind: kindOptions[0], containerCategory: 'application', applicationKind: 'server', dataStoreKind: 'database', sqlDialect: 'postgresql', groupId: '' })
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')

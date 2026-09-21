@@ -8,9 +8,12 @@ ERD notation renders entities as attribute cards connected by UML-style relation
 ```yaml
 notation: uml_multiplicity
 entity_card:
-  header: entity name in the selected name mode (requirement:name-display-switching)
-  rows: data:attribute rows plus projected relationship references
-  badges: classification, dependent entity count, technology
+  header: entity name in the selected name mode (requirement:name-display-switching); kind tag reads "[<storage kind>] <classification>", for example "[Table] Event"; the word entity is omitted because every card is one; compact mode drops the brackets (decision:storage-kind-as-technology)
+  rows:
+    fields_mode: important data:attribute rows with a key marker plus projected relationship references; a footer row counts hidden attributes (requirement:erd-field-visibility)
+    descriptive_mode: description text like a C4 element (requirement:description-display)
+    compact_mode: header only
+  badges: dependent entity count; the kind tag carries the storage kind in brackets before the classification, for example "[Table] Event"
 relationship:
   kinds: data:entity-relationship
   multiplicity_ends: "1 | 0..1 | * | 1..*" as text labels near each end

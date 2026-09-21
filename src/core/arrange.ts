@@ -1,4 +1,4 @@
-import { BOUNDARY_PADDING, CANVAS_MARGIN_BOUNDARY, DEFAULT_BOUNDARY, fitOuterBoundary, layeredLayout, nodeSize, union } from './layout'
+import { BOUNDARY_PADDING, CANVAS_MARGIN_BOUNDARY, DEFAULT_BOUNDARY, fitOuterBoundary, layeredLayout, nodeSize, nodeSizeFor, union } from './layout'
 import type { DiagramView, Position, Project, Rect } from './model'
 import { projectRelationships, visibleElements } from './views'
 
@@ -14,6 +14,7 @@ export function arrangeView(project: Project, view: DiagramView, onlyIds?: Set<s
   const all = [...internal, ...siblings, ...external]
   const relationships = projectRelationships(project, view, all)
   const size = nodeSize(view.displayMode)
+  const sizeOf = (element: { id: string }) => nodeSizeFor(project.elements[element.id] ?? { id: element.id, kind: 'component', name: '', description: '', technology: '' }, view.displayMode, project)
   const contextIds = new Set([...siblings, ...external].map((element) => element.id))
   const roleOf = (id: string): 'source' | 'internal' | 'sink' => {
     if (!contextIds.has(id)) return 'internal'
@@ -26,13 +27,13 @@ export function arrangeView(project: Project, view: DiagramView, onlyIds?: Set<s
   const subject = onlyIds ? all.filter((element) => onlyIds.has(element.id)) : all
   const subjectIds = new Set(subject.map((element) => element.id))
   const laidOut = layeredLayout({
-    nodes: subject.map((element) => ({ id: element.id, ...size, role: roleOf(element.id) })),
+    nodes: subject.map((element) => ({ id: element.id, ...sizeOf(element), role: roleOf(element.id) })),
     edges: relationships.filter((relationship) => subjectIds.has(relationship.sourceId) && subjectIds.has(relationship.targetId)).map((relationship) => ({ sourceId: relationship.sourceId, targetId: relationship.targetId })),
   })
   if (onlyIds) {
     // Keep the selection where it was: translate the arranged block to the selection's old top-left.
-    const old = union(subject.map((element) => ({ ...(view.layout.positions[element.id] ?? { x: 40, y: 40 }), ...size })))
-    const fresh = union(Object.values(laidOut).map((position) => ({ ...position, ...size })))
+    const old = union(subject.map((element) => ({ ...(view.layout.positions[element.id] ?? { x: 40, y: 40 }), ...sizeOf(element) })))
+    const fresh = union(subject.map((element) => ({ ...laidOut[element.id], ...sizeOf(element) })))
     if (old && fresh) {
       const dx = old.x - fresh.x
       const dy = old.y - fresh.y
@@ -42,7 +43,7 @@ export function arrangeView(project: Project, view: DiagramView, onlyIds?: Set<s
   }
   if (view.kind === 'c4_context') return { positions: laidOut }
   // Scope boundary around the internal nodes.
-  const inner = union(internal.map((element) => ({ ...laidOut[element.id], ...size })))
+  const inner = union(internal.map((element) => ({ ...laidOut[element.id], ...sizeOf(element) })))
   const boundary: Rect = inner
     ? { x: inner.x - BOUNDARY_PADDING, y: inner.y - 40, width: inner.width + BOUNDARY_PADDING * 2, height: inner.height + 40 + 48 }
     : DEFAULT_BOUNDARY

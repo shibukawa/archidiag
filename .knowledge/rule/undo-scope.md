@@ -8,6 +8,8 @@ Undo and redo act only on the current actor's own operations, in local and share
 ```yaml
 local:
   stack: the user's operations in this session, including batches from an agent acting as this user
+  text_edits: keystrokes into one text field coalesce into one step while the field keeps focus; blur, a different target, or undo closes the batch, so undo reverts the whole edit session rather than one character
+  toggles: a checkbox, radio, or reorder is always its own step
 shared:
   stack: per participant; undo emits the inverse of the participant's latest own operation as a new data:edit-operation
   conflicts: if a later operation by someone else touched the same target, undo is refused with a pointer to that operation

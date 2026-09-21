@@ -21,6 +21,7 @@
 {"category": "structure", "id": "data:edit-operation", "path": ".knowledge/data/edit-operation.md", "role": "supporting", "title": "Edit Operation", "type": "data"}
 {"category": "structure", "id": "data:element-usage", "path": ".knowledge/data/element-usage.md", "role": "supporting", "title": "Element Usage", "type": "data"}
 {"category": "structure", "id": "data:entity-relationship", "path": ".knowledge/data/entity-relationship.md", "role": "supporting", "title": "Entity Relationship", "type": "data"}
+{"category": "structure", "id": "data:entity-volume", "path": ".knowledge/data/entity-volume.md", "role": "supporting", "title": "Entity Volume Assumptions", "type": "data"}
 {"category": "structure", "id": "data:entity", "path": ".knowledge/data/entity.md", "role": "supporting", "title": "Entity", "type": "data"}
 {"category": "structure", "id": "data:erd-model", "path": ".knowledge/data/erd-model.md", "role": "supporting", "title": "ERD Scope Structure", "type": "data"}
 {"category": "structure", "id": "data:group", "path": ".knowledge/data/group.md", "role": "supporting", "title": "Group", "type": "data"}
@@ -41,17 +42,20 @@
 {"category": "constraint", "id": "decision:context-level-dfd", "path": ".knowledge/decision/context-level-dfd.md", "role": "supporting", "title": "Context-Level DFD", "type": "decision"}
 {"category": "constraint", "id": "decision:diagram-kind-extension", "path": ".knowledge/decision/diagram-kind-extension.md", "role": "supporting", "title": "Extend Diagrams by Kind, Not by Separate Projects", "type": "decision"}
 {"category": "constraint", "id": "decision:field-first-domains", "path": ".knowledge/decision/field-first-domains.md", "role": "supporting", "title": "Field-First Domains", "type": "decision"}
+{"category": "constraint", "id": "decision:important-fields-on-canvas", "path": ".knowledge/decision/important-fields-on-canvas.md", "role": "supporting", "title": "Important Fields on Canvas", "type": "decision"}
 {"category": "constraint", "id": "decision:no-credentials-in-browser", "path": ".knowledge/decision/no-credentials-in-browser.md", "role": "supporting", "title": "No LLM Credentials in the Browser", "type": "decision"}
 {"category": "constraint", "id": "decision:no-logical-physical-split", "path": ".knowledge/decision/no-logical-physical-split.md", "role": "supporting", "title": "No Logical/Physical Split", "type": "decision"}
 {"category": "constraint", "id": "decision:no-whole-project-diagram", "path": ".knowledge/decision/no-whole-project-diagram.md", "role": "supporting", "title": "No Whole-Project Diagram", "type": "decision"}
 {"category": "constraint", "id": "decision:postgresql-canonical-types", "path": ".knowledge/decision/postgresql-canonical-types.md", "role": "supporting", "title": "PostgreSQL as Canonical Type System", "type": "decision"}
 {"category": "constraint", "id": "decision:project-schema-versioning", "path": ".knowledge/decision/project-schema-versioning.md", "role": "supporting", "title": "Project Schema Versioning", "type": "decision"}
+{"category": "constraint", "id": "decision:reference-source-holds-key", "path": ".knowledge/decision/reference-source-holds-key.md", "role": "supporting", "title": "Reference Source Holds the Key", "type": "decision"}
 {"category": "constraint", "id": "decision:review-comments-separate", "path": ".knowledge/decision/review-comments-separate.md", "role": "supporting", "title": "Review Comments Outside the Model", "type": "decision"}
 {"category": "constraint", "id": "decision:server-authority-when-present", "path": ".knowledge/decision/server-authority-when-present.md", "role": "supporting", "title": "Server Authority When Present", "type": "decision"}
 {"category": "constraint", "id": "decision:shared-mode-roles", "path": ".knowledge/decision/shared-mode-roles.md", "role": "supporting", "title": "Shared-Mode Roles and Authentication", "type": "decision"}
 {"category": "constraint", "id": "decision:shared-typescript-core", "path": ".knowledge/decision/shared-typescript-core.md", "role": "supporting", "title": "Shared TypeScript Core", "type": "decision"}
 {"category": "constraint", "id": "decision:static-first-architecture", "path": ".knowledge/decision/static-first-architecture.md", "role": "supporting", "title": "Static-First Architecture", "type": "decision"}
 {"category": "constraint", "id": "decision:status-and-classification-as-perspectives", "path": ".knowledge/decision/status-and-classification-as-perspectives.md", "role": "supporting", "title": "Status and Classification as Valued Perspectives", "type": "decision"}
+{"category": "constraint", "id": "decision:storage-kind-as-technology", "path": ".knowledge/decision/storage-kind-as-technology.md", "role": "supporting", "title": "Storage Kind Fills the Entity Technology Slot", "type": "decision"}
 {"category": "constraint", "id": "decision:vocabulary-binding-scope", "path": ".knowledge/decision/vocabulary-binding-scope.md", "role": "supporting", "title": "Vocabulary Binding Scope", "type": "decision"}
 {"category": "constraint", "id": "decision:webmcp-compatibility", "path": ".knowledge/decision/webmcp-compatibility.md", "role": "supporting", "title": "WebMCP Compatibility Strategy", "type": "decision"}
 {"category": "constraint", "id": "decision:yaml-on-disk-json-in-browser", "path": ".knowledge/decision/yaml-on-disk-json-in-browser.md", "role": "supporting", "title": "YAML on Disk, JSON in Browser", "type": "decision"}
@@ -72,6 +76,8 @@
 {"category": "objective", "id": "requirement:container-types", "path": ".knowledge/requirement/container-types.md", "role": "primary", "title": "Classify Application and Data Store Containers", "type": "requirement"}
 {"category": "objective", "id": "requirement:crud-matrix", "path": ".knowledge/requirement/crud-matrix.md", "role": "primary", "title": "CRUD Matrix from DFD Operations", "type": "requirement"}
 {"category": "objective", "id": "requirement:data-classification", "path": ".knowledge/requirement/data-classification.md", "role": "primary", "title": "Attribute-Level Data Classification", "type": "requirement"}
+{"category": "objective", "id": "requirement:data-volume-bubble-chart", "path": ".knowledge/requirement/data-volume-bubble-chart.md", "role": "primary", "title": "Data Volume Bubble Chart", "type": "requirement"}
+{"category": "objective", "id": "requirement:data-volume-estimation", "path": ".knowledge/requirement/data-volume-estimation.md", "role": "primary", "title": "Data Volume Estimation per Entity", "type": "requirement"}
 {"category": "objective", "id": "requirement:deep-links", "path": ".knowledge/requirement/deep-links.md", "role": "primary", "title": "Deep Links and Embedding", "type": "requirement"}
 {"category": "objective", "id": "requirement:deployment-diagram", "path": ".knowledge/requirement/deployment-diagram.md", "role": "primary", "title": "Deployment Diagram", "type": "requirement"}
 {"category": "objective", "id": "requirement:description-display", "path": ".knowledge/requirement/description-display.md", "role": "primary", "title": "Descriptions on Every Diagram Item", "type": "requirement"}
@@ -83,6 +89,7 @@
 {"category": "objective", "id": "requirement:element-analysis-view", "path": ".knowledge/requirement/element-analysis-view.md", "role": "primary", "title": "Cross-Diagram Element Analysis", "type": "requirement"}
 {"category": "objective", "id": "requirement:element-groups", "path": ".knowledge/requirement/element-groups.md", "role": "primary", "title": "Group Elements Inside a Scope", "type": "requirement"}
 {"category": "objective", "id": "requirement:element-lifecycle-status", "path": ".knowledge/requirement/element-lifecycle-status.md", "role": "primary", "title": "Existing, Planned, and Deprecated Status", "type": "requirement"}
+{"category": "objective", "id": "requirement:erd-field-visibility", "path": ".knowledge/requirement/erd-field-visibility.md", "role": "primary", "title": "Important Fields on the ERD Canvas", "type": "requirement"}
 {"category": "objective", "id": "requirement:erd-in-data-store", "path": ".knowledge/requirement/erd-in-data-store.md", "role": "primary", "title": "ERD as Data Store Component and Code Views", "type": "requirement"}
 {"category": "objective", "id": "requirement:external-context-visibility", "path": ".knowledge/requirement/external-context-visibility.md", "role": "primary", "title": "Show External Context in Nested Views", "type": "requirement"}
 {"category": "objective", "id": "requirement:headless-cli", "path": ".knowledge/requirement/headless-cli.md", "role": "primary", "title": "Headless CLI and Agent Skill", "type": "requirement"}

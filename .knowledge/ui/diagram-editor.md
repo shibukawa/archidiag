@@ -20,7 +20,7 @@ ui:
         controls: breadcrumb, back, current_scope, view_tabs, paired_dfd_list, name_display_mode
       - kind: canvas_toolbar
         id: canvas-toolbar
-        groups: undo_redo, quick_create_and_arrange, layout_helpers (multi-selection only), description_display_mode (descriptive default | compact | technology), style_theme, zoom
+        groups: undo_redo, quick_create_and_arrange, layout_helpers (multi-selection only), description_display_mode (descriptive default | compact | technology on c4_*; descriptive default | fields | compact on erd_*), style_theme, zoom
         view_tabs: views of the current scope and kind; default marked; new, rename, duplicate, delete, set_default
       - kind: explorer
         id: project-explorer
@@ -44,7 +44,7 @@ ui:
       - kind: erd_canvas
         id: erd-canvas
         visible_when: current_diagram.kind starts with erd_
-        node: entity card with attribute rows, key markers, relationship reference rows, dependent count badge, collapse toggle
+        node: entity card; descriptive mode shows the description, fields mode shows important attribute rows with key markers and a hidden field count (requirement:erd-field-visibility); relationship reference rows, dependent count badge
         edge: UML-style relationship with multiplicity labels at both ends and kind markers
       - kind: dfd_canvas
         id: dfd-canvas
@@ -53,6 +53,10 @@ ui:
         edge: labeled directed flow with CRUD at store ends and entity payload chips; no ordering
         region: dashed transaction boundary with name and atomic or eventual marker
         actions: add_node_from_model, link_handle_connect, insert_intermediate_data, zoom_process, add_diagram_ref, draw_transaction_boundary
+      - kind: volume_bubble_chart
+        id: data-volume-chart
+        opened_from: erd canvas toolbar, data store inspector, explorer
+        controls: horizon, measure bytes | rows | daily_writes, legend by classification, export_png_svg (requirement:data-volume-bubble-chart)
       - kind: group_boundary
         id: group-boundaries
         visible_when: current_diagram.kind in c4_context, c4_container, c4_component, erd_component
@@ -95,8 +99,10 @@ ui:
       - kind: field_list
         id: entity-attributes
         visible_when: current_element.kind == entity
-        columns: name, domain, required, unique, primary_key, key_kind, default, value_generation
-        entity_header: dependency independent | dependent with owner picker, classification, description, technology
+        columns: important, name, domain, required, unique, primary_key, key_kind, default, value_generation, description
+        filter: all | important only
+        entity_header: dependency independent | dependent with owner picker, classification, storage kind, description
+        volume_section: data:entity-volume fields with the derived rows, bytes, and daily writes at the project horizon (requirement:data-volume-estimation)
         rows: data:attribute plus relationship reference rows
         quick_entry: type name and Enter creates the field with a same-named domain; drop a domain to use it instead
       - kind: vocabulary_view

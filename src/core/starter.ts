@@ -1,8 +1,18 @@
 import { arrangeView } from './arrange'
 import { createGroup, createView, setElementGroup, setPositions } from './commands'
-import { emptyProject, type Element, type Project, type Relationship } from './model'
+import { emptyProject, makeAttribute, type Attribute, type Element, type Project, type Relationship } from './model'
 
-/** Built-in Commerce Platform starter: every C4 kind, a data store cylinder, groups, and a second container view. */
+/** Attribute shorthand: "name" or "name!" for important; a leading "#" marks the primary key. */
+function fields(specs: string[], descriptions: Record<string, string> = {}): Attribute[] {
+  return specs.map((spec) => {
+    const primaryKey = spec.startsWith('#')
+    const important = spec.endsWith('!') || primaryKey
+    const name = spec.replace(/^#/, '').replace(/!$/, '')
+    return makeAttribute(name, { important, primaryKey, required: primaryKey || spec.endsWith('!'), unique: primaryKey, description: descriptions[name] ?? '' })
+  })
+}
+
+/** Built-in Commerce Platform starter: every C4 kind, data stores with ERDs, groups, and a second container view. */
 export function commerceStarter(): Project {
   let project = emptyProject('Commerce Platform')
   project = { ...project, id: 'project:commerce-platform' }
@@ -35,6 +45,18 @@ export function commerceStarter(): Project {
     { id: 'component:order-list', kind: 'component', parentId: 'container:admin', name: 'Order List Screen', description: 'Search and filter orders.', technology: 'React screen' },
     { id: 'component:order-detail', kind: 'component', parentId: 'container:admin', name: 'Order Detail Screen', description: 'Inspect one order and its payments.', technology: 'React screen' },
     { id: 'component:refund', kind: 'component', parentId: 'container:admin', name: 'Refund Screen', description: 'Issue full or partial refunds.', technology: 'React screen' },
+    // Orders DB tables: many columns each, only the important ones show on the card.
+    { id: 'entity:customer', kind: 'entity', parentId: 'container:orders-db', volume: { recordBytes: 400, initialRows: 50000, growthRows: 200, growthPeriod: 'day' }, name: 'Customer', description: 'A registered shopper. One row per account; guests get a row at first checkout.', technology: '', classification: 'resource', attributes: fields(['#customer_id', 'email!', 'display_name!', 'phone', 'status!', 'locale', 'marketing_opt_in', 'created_at', 'updated_at'], { email: 'Login and notification address; unique per account.', status: 'active | suspended | closed' }) },
+    { id: 'entity:order', kind: 'entity', parentId: 'container:orders-db', volume: { recordBytes: 220, growthRows: 5000, growthPeriod: 'day' }, name: 'Order', description: 'One checkout by a customer. Lines and payments hang off it; status drives fulfillment.', technology: '', classification: 'event', attributes: fields(['#order_id', 'order_number!', 'status!', 'ordered_at!', 'total_amount!', 'currency', 'shipping_address', 'billing_address', 'note', 'created_at', 'updated_at'], { order_number: 'Human-readable number shown to the customer.', status: 'placed | paid | shipped | cancelled | refunded' }) },
+    { id: 'entity:order-line', kind: 'entity', parentId: 'container:orders-db', volume: { recordBytes: 120, growthRows: 15000, growthPeriod: 'day' }, name: 'Order Line', description: 'One product in one order at the price charged.', technology: '', classification: 'event', attributes: fields(['#order_line_id', 'product_ref!', 'quantity!', 'unit_price!', 'discount', 'tax_rate', 'created_at'], { product_ref: 'SKU snapshot from the Catalog DB at order time.' }) },
+    { id: 'entity:payment', kind: 'entity', parentId: 'container:orders-db', volume: { recordBytes: 160, growthRows: 5000, growthPeriod: 'day' }, name: 'Payment', description: 'An authorization or capture against an order, as reported by the payment provider.', technology: '', classification: 'event', attributes: fields(['#payment_id', 'method!', 'amount!', 'authorized_at!', 'captured_at', 'provider_reference', 'failure_reason', 'created_at']) },
+    { id: 'entity:refund', kind: 'entity', parentId: 'container:orders-db', volume: { recordBytes: 140, growthRows: 60, growthPeriod: 'day' }, name: 'Refund', description: 'Money returned for an order, full or partial.', technology: '', classification: 'event', attributes: fields(['#refund_id', 'amount!', 'reason!', 'refunded_at!', 'provider_reference', 'created_at']) },
+    // A dependent table: addresses exist only inside their customer (data:entity dependency).
+    { id: 'entity:customer-address', kind: 'entity', parentId: 'entity:customer', volume: { recordBytes: 260, initialRows: 60000, growthRows: 300, growthPeriod: 'day' }, name: 'Customer Address', description: 'A shipping or billing address kept on the customer; deleted with it.', technology: '', classification: 'resource', attributes: fields(['#customer_address_id', 'kind!', 'postal_code!', 'line1!', 'line2', 'city', 'country', 'is_default'], { kind: 'shipping | billing' }) },
+    // Catalog DB tables.
+    { id: 'entity:product', kind: 'entity', parentId: 'container:catalog-db', volume: { recordBytes: 600, initialRows: 20000, growthRows: 50, growthPeriod: 'day' }, name: 'Product', description: 'A sellable item with its listing price.', technology: '', classification: 'resource', attributes: fields(['#product_id', 'sku!', 'name!', 'price!', 'description', 'active', 'created_at', 'updated_at']) },
+    { id: 'entity:availability', kind: 'entity', parentId: 'container:catalog-db', volume: { recordBytes: 96, initialRows: 20000, refreshMode: 'rebuild', refreshEvery: 'hourly' }, name: 'Product Availability', description: 'Sellable quantity per product for the storefront: on hand minus reserved.', technology: '', classification: 'summary', storageKind: 'materialized_view', attributes: fields(['sku!', 'name!', 'available_quantity!', 'refreshed_at']) },
+    { id: 'entity:inventory', kind: 'entity', parentId: 'container:catalog-db', volume: { recordBytes: 64, initialRows: 20000, growthRows: 50, growthPeriod: 'day' }, name: 'Inventory', description: 'Stock on hand and reserved quantity per product.', technology: '', classification: 'work', attributes: fields(['#inventory_id', 'quantity_on_hand!', 'reserved!', 'updated_at']) },
   ]
   elements.forEach((element) => { project.elements[element.id] = element })
   const relationships: Relationship[] = [
@@ -63,6 +85,16 @@ export function commerceStarter(): Project {
     { id: 'rel:cart-checkout', sourceId: 'component:cart', targetId: 'component:checkout', label: 'starts checkout in' },
     { id: 'rel:checkout-orders', sourceId: 'component:checkout', targetId: 'component:orders', label: 'stores order via' },
     { id: 'rel:checkout-publisher', sourceId: 'component:checkout', targetId: 'component:publisher', label: 'emits events via' },
+    // ERD: the many side references the one side (rule: erd-scope-integrity keeps them inside one data store).
+    { id: 'rel:order-customer', sourceId: 'entity:order', targetId: 'entity:customer', label: 'placed by', erd: { kind: 'reference', sourceCardinality: '*', targetCardinality: '1', important: true } },
+    { id: 'rel:line-order', sourceId: 'entity:order-line', targetId: 'entity:order', label: 'belongs to', erd: { kind: 'reference', sourceCardinality: '1..*', targetCardinality: '1' } },
+    { id: 'rel:payment-order', sourceId: 'entity:payment', targetId: 'entity:order', label: 'pays', erd: { kind: 'reference', sourceCardinality: '*', targetCardinality: '1' } },
+    { id: 'rel:refund-payment', sourceId: 'entity:refund', targetId: 'entity:payment', label: 'reverses', erd: { kind: 'reference', sourceCardinality: '*', targetCardinality: '1' } },
+    { id: 'rel:customer-address', sourceId: 'entity:customer', targetId: 'entity:customer-address', label: 'has', erd: { kind: 'dependent', sourceCardinality: '1', targetCardinality: '*' } },
+    { id: 'rel:order-address', sourceId: 'entity:order', targetId: 'entity:customer-address', label: 'ships to', erd: { kind: 'reference', sourceCardinality: '*', targetCardinality: '0..1' } },
+    { id: 'rel:availability-product', sourceId: 'entity:availability', targetId: 'entity:product', label: 'derived from', erd: { kind: 'label', sourceCardinality: '1', targetCardinality: '1' } },
+    { id: 'rel:availability-inventory', sourceId: 'entity:availability', targetId: 'entity:inventory', label: 'derived from', erd: { kind: 'label', sourceCardinality: '1', targetCardinality: '1' } },
+    { id: 'rel:inventory-product', sourceId: 'entity:inventory', targetId: 'entity:product', label: 'tracks stock of', erd: { kind: 'reference', sourceCardinality: '1', targetCardinality: '1' } },
   ]
   relationships.forEach((relationship) => { project.relationships[relationship.id] = relationship })
 
@@ -86,7 +118,13 @@ export function commerceStarter(): Project {
   project = webScreens.project
   const adminScreens = createView(project, 'c4_component', 'container:admin', '')
   project = adminScreens.project
-  ;[context.view, containers.view, payments.view, components.view, webScreens.view, adminScreens.view].forEach((view) => {
+  // The Orders ERD opens in fields mode to show the important-field cards; the Catalog ERD keeps the descriptive default.
+  const ordersErd = createView(project, 'erd_component', 'container:orders-db', '')
+  project = ordersErd.project
+  project = { ...project, views: { ...project.views, [ordersErd.view.id]: { ...ordersErd.view, displayMode: 'fields' } } }
+  const catalogErd = createView(project, 'erd_component', 'container:catalog-db', '')
+  project = catalogErd.project
+  ;[context.view, containers.view, payments.view, components.view, webScreens.view, adminScreens.view, ordersErd.view, catalogErd.view].forEach((view) => {
     const arranged = arrangeView(project, project.views[view.id])
     project = setPositions(project, view.id, arranged.positions, arranged.boundary)
   })

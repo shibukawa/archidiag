@@ -6,7 +6,7 @@ title: Attribute
 An attribute is one column definition of data:entity that carries its business name, system name, physical name, domain, and physical projection in a single record.
 
 ```yaml
-fields: id, entity_id, name, name_binding, use_domain_name, domain_id, required, unique, primary_key, key_kind, default, value_generation, description, order
+fields: id, entity_id, name, name_binding, use_domain_name, domain_id, required, unique, primary_key, key_kind, default, value_generation, description, important, order
 name_binding: data:vocabulary-binding derived from name by rule:vocabulary-resolution
 use_domain_name: default false; when true the effective name is name + domain name without separator and an empty name is allowed; useful after consolidation, for example Article + CreatedAt
 domain_id: data:data-domain reference; domain definition is the type authority; quick entry assigns the domain named like the field (requirement:domain-consolidation)
@@ -15,6 +15,7 @@ default:
   literal_types: string | number | boolean
 key_kind: none | surrogate | natural; surrogate columns end with _id and natural columns with _code per rule:physical-naming-policy
 value_generation: none | auto_increment | uuid | sequence; surrogate keys normally generate, natural keys never do
+important: boolean, default false, true for a created primary key; only important attributes render on erd cards (requirement:erd-field-visibility)
 physical_projection:
   columns: rule:domain-expansion; one column for a scalar domain, one per component for a composite domain
   column_name: physical_name segments from the binding plus component names

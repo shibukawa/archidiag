@@ -81,7 +81,18 @@ function descendantsOf(project: Project, ids: Iterable<string>): Set<string> {
  */
 export function visibleElements(project: Project, view: DiagramView): VisibleElements {
   const internal = scopeElements(project, view)
-  if (view.kind === 'c4_context') return { internal, siblings: [], external: [] }
+  // ERD views show the data store's entities only; readers and writers of the store are a DFD concern.
+  if (view.kind === 'c4_context' || view.kind === 'erd_component') return { internal, siblings: [], external: [] }
+  if (view.kind === 'erd_code') {
+    // The owner entity is drawn inside its own view with its dependents; other entities it relates to sit outside as context.
+    const owner = view.scopeId ? project.elements[view.scopeId] : undefined
+    const inside = owner ? [owner, ...internal] : internal
+    const insideIds = new Set(inside.map((element) => element.id))
+    const relationships = Object.values(project.relationships)
+    const external = Object.values(project.elements).filter((element) => element.kind === 'entity' && !insideIds.has(element.id)
+      && relationships.some((relationship) => (relationship.sourceId === element.id && insideIds.has(relationship.targetId)) || (relationship.targetId === element.id && insideIds.has(relationship.sourceId))))
+    return { internal: inside, siblings: [], external }
+  }
   const internalIds = new Set(internal.map((element) => element.id))
   const ancestors = ancestorIds(project, view.scopeId)
   const ownerIds = new Set(ancestors)
@@ -148,8 +159,10 @@ export function projectRelationships(project: Project, view: DiagramView, visibl
     const visibleSource = resolveVisibleEndpoint(project, sourceId, withScope)
     const visibleTarget = resolveVisibleEndpoint(project, targetId, withScope)
     if (!visibleSource || !visibleTarget || visibleSource === visibleTarget) return []
-    const sourceIsScope = visibleSource === view.scopeId
-    const targetIsScope = visibleTarget === view.scopeId
+    // erd_code draws the scope entity as a node, so a relationship reaching it is an ordinary edge, not a boundary edge.
+    const scopeVisible = Boolean(view.scopeId && ids.has(view.scopeId))
+    const sourceIsScope = !scopeVisible && visibleSource === view.scopeId
+    const targetIsScope = !scopeVisible && visibleTarget === view.scopeId
     if (sourceIsScope && targetIsScope) return []
     return [{
       ...relationship,
@@ -170,6 +183,8 @@ export function projectRelationships(project: Project, view: DiagramView, visibl
     if (relationship.boundaryEnd && projected.some((other) => other !== relationship && other.id === relationship.id && !other.boundaryEnd)) return false
     return true
   })
+  // ERD views keep one line per relationship: each carries its own multiplicity ends.
+  if (view.kind === 'erd_component' || view.kind === 'erd_code') return kept
   // One edge per visible pair and direction: labels and technologies are folded together, one per line.
   const byPair = new Map<string, ProjectedRelationship[]>()
   kept.forEach((relationship) => {

@@ -1,4 +1,4 @@
-import { emptyProject, SCHEMA_VERSION, type C4Level, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
+import { emptyProject, ENTITY_CLASSIFICATIONS, LEGACY_CLASSIFICATIONS, makeId, SCHEMA_VERSION, type C4Level, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
 import { makeView } from './views'
 
 interface LegacyElement extends Element { position?: Position }
@@ -40,6 +40,7 @@ export function migrateProject(raw: unknown): Project {
 
 function normalize(project: Project): Project {
   const base = emptyProject(project.name)
+  // v2 -> v3 is additive: entities, attributes, erd_component views, and the erd relationship record.
   return {
     ...base,
     ...project,
@@ -47,8 +48,17 @@ function normalize(project: Project): Project {
     groups: project.groups ?? {},
     views: Object.fromEntries(Object.entries(project.views ?? {}).map(([id, view]) => [id, { ...makeView(view.kind, view.scopeId, view.name, view.isDefault), ...view, id, layout: { positions: view.layout?.positions ?? {}, boundary: view.layout?.boundary } }])),
     settings: { ...base.settings, ...project.settings },
-    elements: Object.fromEntries(Object.entries(project.elements).map(([id, element]) => [id, stripLegacy(element as LegacyElement)])),
+    elements: Object.fromEntries(Object.entries(project.elements).map(([id, element]) => [id, normalizeElement(stripLegacy(element as LegacyElement))])),
   }
+}
+
+function normalizeElement(element: Element): Element {
+  if (element.kind !== 'entity') return element
+  const attributes = (element.attributes ?? []).map((attribute) => ({ id: attribute.id ?? makeId('attr'), name: attribute.name ?? '', description: attribute.description ?? '', important: Boolean(attribute.important), primaryKey: Boolean(attribute.primaryKey), required: Boolean(attribute.required), unique: Boolean(attribute.unique) }))
+  const raw = element.classification as string | undefined
+  const classification = raw ? (ENTITY_CLASSIFICATIONS.includes(raw as never) ? element.classification : LEGACY_CLASSIFICATIONS[raw]) : undefined
+  // Entities carry no free technology text (decision: storage-kind-as-technology).
+  return { ...element, attributes, classification, technology: '' }
 }
 
 function stripLegacy(element: LegacyElement): Element {
@@ -78,7 +88,7 @@ function migrateV1(data: LegacyProject): Project {
     project.views[view.id] = view
     return view
   }
-  const levelOf: Record<ViewKind, C4Level> = { c4_context: 'context', c4_container: 'container', c4_component: 'component' }
+  const levelOf: Record<ViewKind, C4Level> = { c4_context: 'context', c4_container: 'container', c4_component: 'component', erd_component: 'component', erd_code: 'component' }
   const scopesToBuild: Array<{ kind: ViewKind; scopeId: string | null }> = [{ kind: 'c4_context', scopeId: null }]
   Object.values(project.elements).forEach((element) => {
     if (element.kind === 'softwareSystem') scopesToBuild.push({ kind: 'c4_container', scopeId: element.id })

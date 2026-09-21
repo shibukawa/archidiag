@@ -6,7 +6,8 @@ title: Entity
 An entity is a table-like canonical element inside a data store container; an independent entity is a component of the data store and a dependent entity is a code-level child of another entity.
 
 ```yaml
-fields: id, kind=entity, parent_id, dependency, name, name_binding, description, classification, technology, attributes, lifecycle_note
+fields: id, kind=entity, parent_id, dependency, name, name_binding, description, classification, storage_kind, volume, attributes, lifecycle_note
+storage_kind: table (default) | view | materialized_view; the physical form, separate from classification so an analytical summary can be a table or a materialized view; rendered in the technology brackets (decision:storage-kind-as-technology); the DBMS name belongs to the data store container
 dependency: independent | dependent; explicit, editable in the inspector, and kept consistent with parent_id
 parent_id:
   independent: data store container id with data_store_kind database or database_schema
@@ -15,10 +16,10 @@ level:
   independent: shown in the data store's erd_component diagram
   dependent: shown in the owner's erd_code diagram; the owner card shows a dependent count badge
 dependency_meaning: the dependent entity exists only inside its owner (ownership, lifecycle, delete cascade); SQL foreign keys alone cannot preserve this, so the tree keeps it explicit
-classification: master | transaction | detail | summary | history | snapshot | work | reference | log
+classification: resource | event | summary | work | code; resource and event follow T-style ER naming (a thing that exists vs. something that happened); code is a code or category table; legacy master, transaction, detail, history, log, snapshot, reference map on import
 name_binding: data:vocabulary-binding
 attributes: ordered data:attribute list
-technology: optional physical table note, for example partitioning or engine
+volume: data:entity-volume sizing assumptions; there is no free technology text on an entity
 examples:
   independent: User
   dependent_of_user: Affiliation, Belonging

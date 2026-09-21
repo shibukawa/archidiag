@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { arrangeView } from '../core/arrange'
 import * as commands from '../core/commands'
 import { parseProject, serializeProject } from '../core/io'
-import { alignBoxes, arrangeBoxes, distributeBoxes, nextFreePosition, nodeSize, spaceBoxes, type AlignMode, type ArrangeMode, type Box } from '../core/layout'
-import { childViewKind, emptyProject, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from '../core/model'
+import { alignBoxes, arrangeBoxes, distributeBoxes, nextFreePosition, nodeSize, nodeSizeFor, spaceBoxes, type AlignMode, type ArrangeMode, type Box } from '../core/layout'
+import { childViewKind, defaultErdRelationship, displayModesFor, emptyProject, isErdStore, isErdView, scopeViewKindFor, storeOf, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from '../core/model'
 import { buildRenderModel } from '../core/render'
 import { commerceStarter } from '../core/starter'
 import { THEMES } from '../core/theme'
@@ -18,6 +18,7 @@ import { Inspector } from './Inspector'
 import { QuickCreate, type QuickCreateInput } from './QuickCreate'
 import { useProjectHistory } from './useHistory'
 import { ValidationPanel } from './ValidationPanel'
+import { VolumePanel } from './VolumePanel'
 import { registerWebMcpTools } from './webmcp'
 
 const STORAGE_KEY = 'c4sketch-project-v2'
@@ -43,7 +44,7 @@ function parseHash(): { viewId?: string; select: string[] } {
 
 export default function App() {
   const history = useProjectHistory(loadInitial())
-  const { project, projectRef, commit, replace, undo, redo, canUndo, canRedo } = history
+  const { project, projectRef, commit, endBatch, replace, undo, redo, canUndo, canRedo } = history
   const [locale, setLocale] = useState<Locale>(() => (localStorage.getItem(LOCALE_KEY) === 'ja' ? 'ja' : 'en'))
   const copy = COPY[locale]
   const initialHash = useMemo(parseHash, [])
@@ -53,6 +54,7 @@ export default function App() {
   const [preview, setPreview] = useState<{ positions: Record<string, Position> | null; boundary: Rect | null }>({ positions: null, boundary: null })
   const [quickCreate, setQuickCreate] = useState(false)
   const [showChecks, setShowChecks] = useState(false)
+  const [showVolume, setShowVolume] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const [search, setSearch] = useState('')
@@ -114,6 +116,9 @@ export default function App() {
   const selectedNodes = useMemo(() => model.nodes.filter((node) => selectedIds.has(node.id)), [model.nodes, selectedIds])
 
   const say = useCallback((message: string) => setNotice(message), [])
+  const setHorizon = useCallback((months: number) => commit((current) => ({ ...current, settings: { ...current.settings, volumeHorizonMonths: months } }), 'settings:horizon'), [commit])
+  // The data store whose volume the bubble chart shows: the scope of a Component ERD, or the owner store of a Code ERD.
+  const volumeStoreId = isErdView(view.kind) && view.scopeId ? (view.kind === 'erd_component' ? view.scopeId : storeOf(project, project.elements[view.scopeId])?.id) : undefined
 
   const openScope = useCallback((kind: ViewKind, scopeId: string | null) => {
     const current = projectRef.current
@@ -149,9 +154,10 @@ export default function App() {
     })
   }, [])
 
-  const patchElement = useCallback((id: string, patch: Partial<Element>) => commit((current) => commands.patchElement(current, id, patch)), [commit])
-  const patchRelationship = useCallback((id: string, patch: Partial<Relationship>) => commit((current) => commands.patchRelationship(current, id, patch)), [commit])
-  const patchView = useCallback((patch: Partial<DiagramView>) => commit((current) => commands.patchView(current, view.id, patch)), [commit, view.id])
+  // The optional batch key folds a text field's keystrokes into one undo step until the field blurs (rule: undo-scope).
+  const patchElement = useCallback((id: string, patch: Partial<Element>, batchKey?: string) => commit((current) => commands.patchElement(current, id, patch), batchKey), [commit])
+  const patchRelationship = useCallback((id: string, patch: Partial<Relationship>, batchKey?: string) => commit((current) => commands.patchRelationship(current, id, patch), batchKey), [commit])
+  const patchView = useCallback((patch: Partial<DiagramView>, batchKey?: string) => commit((current) => commands.patchView(current, view.id, patch), batchKey), [commit, view.id])
 
   const deleteElements = useCallback((ids: string[]) => {
     const current = projectRef.current
@@ -173,22 +179,25 @@ export default function App() {
 
   const createFromQuick = useCallback((input: QuickCreateInput) => {
     const current = projectRef.current
-    const size = nodeSize(view.displayMode)
     const existing = model.nodes.map((node) => node.rect)
     const region = model.boundary && view.kind !== 'c4_context' ? model.boundary : undefined
+    // A new table starts with its surrogate primary key; under an owner entity it also gets its dependent link.
+    const created = input.kind === 'entity'
+      ? commands.createEntity(current, { name: input.name, description: input.description, technology: '', parentId: view.scopeId ?? undefined, groupId: input.groupId })
+      : commands.createElement(current, {
+        kind: input.kind,
+        name: input.name,
+        description: input.description,
+        technology: '',
+        parentId: view.scopeId ?? undefined,
+        containerCategory: input.containerCategory,
+        applicationKind: input.applicationKind,
+        dataStoreKind: input.dataStoreKind,
+        sqlDialect: input.sqlDialect,
+        groupId: input.groupId,
+      })
+    const size = input.kind === 'entity' ? nodeSizeFor(created.element, view.displayMode) : nodeSize(view.displayMode)
     const position = nextFreePosition(existing, size, lastCreated.current ?? undefined, region)
-    const created = commands.createElement(current, {
-      kind: input.kind,
-      name: input.name,
-      description: input.description,
-      technology: '',
-      parentId: view.scopeId ?? undefined,
-      containerCategory: input.containerCategory,
-      applicationKind: input.applicationKind,
-      dataStoreKind: input.dataStoreKind,
-      sqlDialect: input.sqlDialect,
-      groupId: input.groupId,
-    })
     let next = commands.setPositions(created.project, view.id, { [created.element.id]: position })
     if (view.elementRefs.length) next = commands.patchView(next, view.id, { elementRefs: [...view.elementRefs, created.element.id] })
     commit(() => next)
@@ -219,7 +228,9 @@ export default function App() {
     const current = projectRef.current
     const existing = Object.values(current.relationships).find((relationship) => relationship.sourceId === sourceId && relationship.targetId === targetId)
     if (existing) { setSelectedIds(new Set([existing.id])); return }
-    const created = commands.createRelationship(current, { sourceId, targetId, label: '' })
+    // Entity to entity: a reference from the many side to the one side, editable in the inspector.
+    const erd = current.elements[sourceId]?.kind === 'entity' && current.elements[targetId]?.kind === 'entity' ? defaultErdRelationship() : undefined
+    const created = commands.createRelationship(current, { sourceId, targetId, label: '', ...(erd ? { erd } : {}) })
     commit(() => created.project)
     setSelectedIds(new Set([created.relationship.id]))
   }, [commit, projectRef])
@@ -318,13 +329,19 @@ export default function App() {
       const parent = input.parentId ? current.elements[input.parentId] : undefined
       if (input.kind === 'container' && parent?.kind !== 'softwareSystem') return { error: 'Containers need a software system parent' }
       if (input.kind === 'component' && parent?.kind !== 'container') return { error: 'Components need an application container parent' }
-      const created = commands.createElement(current, { kind: input.kind, name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, containerCategory: input.containerCategory, applicationKind: input.applicationKind, dataStoreKind: input.dataStoreKind })
+      if (input.kind === 'entity' && !isErdStore(parent) && parent?.kind !== 'entity') return { error: 'Entities need a database or database schema container parent, or an owner entity for a dependent table' }
+      const created = input.kind === 'entity'
+        ? commands.createEntity(current, { name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, classification: input.classification, storageKind: input.storageKind })
+        : commands.createElement(current, { kind: input.kind, name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, containerCategory: input.containerCategory, applicationKind: input.applicationKind, dataStoreKind: input.dataStoreKind })
       commit(() => created.project)
       return created.element
     },
     updateElement: (id, patch) => { if (!projectRef.current.elements[id]) return { error: 'Unknown element' }; patchElement(id, patch); return { ...projectRef.current.elements[id], ...patch } },
     deleteElements: (ids) => commands.deleteElements(projectRef.current, ids).deletedIds.length ? deleteElements(ids) : [],
-    createRelationship: (input) => { const current = projectRef.current; if (!current.elements[input.sourceId] || !current.elements[input.targetId]) return { error: 'Unknown endpoint' }; const created = commands.createRelationship(current, input); commit(() => created.project); return created.relationship },
+    createRelationship: (input) => { const current = projectRef.current; if (!current.elements[input.sourceId] || !current.elements[input.targetId]) return { error: 'Unknown endpoint' }; const erd = current.elements[input.sourceId].kind === 'entity' && current.elements[input.targetId].kind === 'entity' ? { ...defaultErdRelationship(), ...input.erd } : undefined; const { erd: _requested, ...rest } = input; const created = commands.createRelationship(current, { ...rest, ...(erd ? { erd } : {}) }); commit(() => created.project); return created.relationship },
+    addAttribute: (entityId, name, patch) => { const current = projectRef.current; if (current.elements[entityId]?.kind !== 'entity') return { error: 'Unknown entity' }; const result = commands.addAttribute(current, entityId, name, patch); commit(() => result.project); return result.attribute },
+    updateAttribute: (entityId, attributeId, patch) => { const current = projectRef.current; const attribute = current.elements[entityId]?.attributes?.find((item) => item.id === attributeId); if (!attribute) return { error: 'Unknown attribute' }; commit((state) => commands.patchAttribute(state, entityId, attributeId, patch)); return { ...attribute, ...patch } },
+    deleteAttribute: (entityId, attributeId) => { const current = projectRef.current; if (!current.elements[entityId]?.attributes?.some((item) => item.id === attributeId)) return false; commit((state) => commands.deleteAttribute(state, entityId, attributeId)); return true },
     updateRelationship: (id, patch) => { if (!projectRef.current.relationships[id]) return { error: 'Unknown relationship' }; patchRelationship(id, patch); return { ...projectRef.current.relationships[id], ...patch } },
     deleteRelationship,
     arrangeView: (viewId) => runArrange(false, viewId ?? view.id),
@@ -347,7 +364,7 @@ export default function App() {
           </div>
           <div className="relative flex items-center gap-2 text-sm text-muted">
             <Icon name="folder" size={15} />
-            <input className="w-48 rounded-md border border-transparent bg-transparent px-1 text-base-content hover:border-line focus:border-cyan focus:outline-none" value={project.name} onChange={(event) => commit((current) => ({ ...current, name: event.target.value }))} />
+            <input className="w-48 rounded-md border border-transparent bg-transparent px-1 text-base-content hover:border-line focus:border-cyan focus:outline-none" value={project.name} onChange={(event) => commit((current) => ({ ...current, name: event.target.value }), 'project:name')} onBlur={endBatch} />
             <span className="rounded-md border border-line px-1.5 py-0.5 text-[10px]">{copy.local}</span>
             <button type="button" className="btn btn-ghost btn-xs text-muted" onClick={() => setShowNew((value) => !value)}>{copy.newProject}<Icon name="chevronDown" size={12} /></button>
             {showNew && (
@@ -383,7 +400,7 @@ export default function App() {
       </header>
 
       <main className="grid h-[calc(100vh-60px)] grid-cols-[232px_minmax(480px,1fr)_280px]">
-        <Explorer project={project} view={view} copy={copy} search={search} onSearch={setSearch} onOpenScope={openScope} onSelectElement={(id) => { const element = project.elements[id]; if (!element) return; const scopeKind: ViewKind = element.parentId ? (project.elements[element.parentId]?.kind === 'softwareSystem' ? 'c4_container' : 'c4_component') : 'c4_context'; if (view.scopeId !== (element.parentId ?? null) || view.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null); setSelectedIds(new Set([id])) }} onQuickCreate={() => setQuickCreate(true)} notice={notice} />
+        <Explorer project={project} view={view} copy={copy} search={search} onSearch={setSearch} onOpenScope={openScope} onSelectElement={(id) => { const element = project.elements[id]; if (!element) return; const scopeKind: ViewKind = scopeViewKindFor(project, element); if (view.scopeId !== (element.parentId ?? null) || view.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null); setSelectedIds(new Set([id])) }} onQuickCreate={() => setQuickCreate(true)} notice={notice} />
 
         <section className="flex min-w-0 flex-col bg-ink/35">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line/80 px-5 py-2">
@@ -416,6 +433,7 @@ export default function App() {
               <div className="join border border-line bg-panel/60">
                 {helperButton('plus', `${copy.quickCreate} (N)`, () => setQuickCreate(true))}
                 {helperButton('wand', multi ? copy.arrangeSelection : copy.arrangeAll, () => runArrange(multi))}
+                {volumeStoreId && helperButton('bubbles', copy.bubbleChart, () => setShowVolume((value) => !value))}
               </div>
               {multi && <div className="join border border-line bg-panel/60">
                 {helperButton('alignLeft', copy.alignLeft, () => applyLayout((boxes) => alignBoxes(boxes, 'left' as AlignMode)), !multi)}
@@ -433,9 +451,9 @@ export default function App() {
                 {helperButton('expand', copy.loosen, () => applyLayout((boxes) => spaceBoxes(boxes, 0.15)), !multi)}
               </div>}
               <div className="join border border-line bg-panel/60" title={copy.displayMode}>
-                {(['descriptive', 'compact', 'technology_only'] as const).map((mode) => (
+                {displayModesFor(view.kind).map((mode) => (
                   <button key={mode} type="button" className={`btn btn-ghost btn-xs join-item ${view.displayMode === mode ? 'bg-cyan/15 text-cyan' : 'text-muted hover:bg-white/5'}`} onClick={() => patchView({ displayMode: mode })}>
-                    {mode === 'descriptive' ? copy.descriptive : mode === 'compact' ? copy.compact : copy.technologyOnly}
+                    {mode === 'descriptive' ? copy.descriptive : mode === 'compact' ? copy.compact : mode === 'fields' ? copy.fieldsMode : copy.technologyOnly}
                   </button>
                 ))}
               </div>
@@ -473,6 +491,7 @@ export default function App() {
               <span>{copy.viewKinds[view.kind]} · {model.nodes.length} / {model.edges.length}</span>
             </div>
           </div>
+          {showVolume && volumeStoreId && <VolumePanel project={project} storeId={volumeStoreId} copy={copy} selectedIds={selectedIds} onSelect={(id) => setSelectedIds(new Set([id]))} onSetHorizon={setHorizon} onClose={() => setShowVolume(false)} />}
           {showChecks && <ValidationPanel findings={findings} profileId={project.settings.checkProfile} copy={copy} onProfileChange={(id) => commit((current) => ({ ...current, settings: { ...current.settings, checkProfile: id } }))} onNavigate={navigateFinding} onClose={() => setShowChecks(false)} />}
         </section>
 
@@ -489,7 +508,9 @@ export default function App() {
           onOpenScope={openScope}
           onPatchView={patchView}
           onCreateGroup={(name) => commit((current) => commands.createGroup(current, { scopeId: view.scopeId, name, description: '' }).project)}
-          onPatchGroup={(id, patch) => commit((current) => commands.patchGroup(current, id, patch))}
+          onPatchGroup={(id, patch, batchKey) => commit((current) => commands.patchGroup(current, id, patch), batchKey)}
+          onEndBatch={endBatch}
+          onSetHorizon={setHorizon}
           onDeleteGroup={(id) => commit((current) => commands.deleteGroup(current, id))}
           onCopyLink={copyLink}
           onSelect={(id) => setSelectedIds(new Set([id]))}

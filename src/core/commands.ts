@@ -1,5 +1,5 @@
 // Pure project commands. Each returns a new project; the UI wraps them in history.
-import { makeId, type DiagramView, type Element, type Group, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
+import { defaultAttributesFor, dependentRelationship, makeAttribute, makeId, type Attribute, type DiagramView, type Element, type Group, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
 import { makeView } from './views'
 
 export function upsertElement(project: Project, element: Element): Project {
@@ -132,4 +132,44 @@ export function deleteGroup(project: Project, id: string): Project {
 
 export function setElementGroup(project: Project, elementId: string, groupId: string | undefined): Project {
   return patchElement(project, elementId, { groupId })
+}
+
+/** Creates an entity with its surrogate key; under an owner entity it also creates the dependent relationship. */
+export function createEntity(project: Project, input: Omit<Element, 'id' | 'kind'> & { id?: string }): { project: Project; element: Element } {
+  const created = createElement(project, { ...input, kind: 'entity', attributes: input.attributes ?? defaultAttributesFor(input.name) })
+  const owner = input.parentId ? created.project.elements[input.parentId] : undefined
+  if (owner?.kind !== 'entity') return created
+  return { project: createRelationship(created.project, { sourceId: owner.id, targetId: created.element.id, label: '', erd: dependentRelationship() }).project, element: created.element }
+}
+
+// ---------- entity attributes ----------
+
+export function addAttribute(project: Project, entityId: string, name: string, patch: Partial<Attribute> = {}): { project: Project; attribute: Attribute } {
+  const entity = project.elements[entityId]
+  const attribute = makeAttribute(name, patch)
+  if (!entity || entity.kind !== 'entity') return { project, attribute }
+  return { project: patchElement(project, entityId, { attributes: [...(entity.attributes ?? []), attribute] }), attribute }
+}
+
+export function patchAttribute(project: Project, entityId: string, attributeId: string, patch: Partial<Attribute>): Project {
+  const entity = project.elements[entityId]
+  if (!entity?.attributes?.some((attribute) => attribute.id === attributeId)) return project
+  return patchElement(project, entityId, { attributes: entity.attributes.map((attribute) => (attribute.id === attributeId ? { ...attribute, ...patch } : attribute)) })
+}
+
+export function deleteAttribute(project: Project, entityId: string, attributeId: string): Project {
+  const entity = project.elements[entityId]
+  if (!entity?.attributes) return project
+  return patchElement(project, entityId, { attributes: entity.attributes.filter((attribute) => attribute.id !== attributeId) })
+}
+
+/** Moves an attribute up (-1) or down (+1) in the field order. */
+export function moveAttribute(project: Project, entityId: string, attributeId: string, delta: -1 | 1): Project {
+  const entity = project.elements[entityId]
+  const attributes = [...(entity?.attributes ?? [])]
+  const index = attributes.findIndex((attribute) => attribute.id === attributeId)
+  const target = index + delta
+  if (index < 0 || target < 0 || target >= attributes.length) return project
+  ;[attributes[index], attributes[target]] = [attributes[target], attributes[index]]
+  return patchElement(project, entityId, { attributes })
 }

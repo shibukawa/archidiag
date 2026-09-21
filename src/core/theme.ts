@@ -1,8 +1,8 @@
 import type { ApplicationKind, DataStoreKind, Element, ThemeId } from './model'
 import { effectiveCategory } from './model'
 
-export type Shape = 'rounded_box' | 'box' | 'cylinder' | 'horizontal_cylinder' | 'person_figure' | 'bucket' | 'folder' | 'browser_window' | 'mobile_device' | 'desktop_window'
-export type IconKind = 'person' | 'external' | 'database' | 'schema' | 'queue' | 'bucket' | 'cache' | 'folder' | 'store' | 'system' | 'component' | 'container' | 'terminal' | 'gear' | 'none'
+export type Shape = 'rounded_box' | 'box' | 'cylinder' | 'horizontal_cylinder' | 'person_figure' | 'bucket' | 'folder' | 'browser_window' | 'mobile_device' | 'desktop_window' | 'card'
+export type IconKind = 'person' | 'external' | 'database' | 'schema' | 'queue' | 'bucket' | 'cache' | 'folder' | 'store' | 'system' | 'component' | 'container' | 'terminal' | 'gear' | 'table' | 'none'
 
 export interface Token {
   shape: Shape
@@ -28,6 +28,7 @@ export type TokenKey =
   | 'containerFileShare'
   | 'containerOther'
   | 'component'
+  | 'entity'
   | 'externalContext'
 
 export interface Theme {
@@ -64,6 +65,8 @@ const compact: Theme = {
     containerFileShare: token('folder', blue.mid, '#1d5391', '#ffffff', '#dbe8f8', 'folder'),
     containerOther: token('rounded_box', blue.mid, '#1d5391', '#ffffff', '#dbe8f8', 'store'),
     component: token('rounded_box', '#85bbf0', '#5f9adb', '#0b1a2e', '#22406a', 'component'),
+    // Card: the fill paints the header band; the body is drawn in the theme background.
+    entity: token('card', '#c7ddf6', '#5f9adb', '#0b1a2e', '#22406a', 'table'),
     externalContext: token('rounded_box', '#8c8c8c', '#6f6f6f', '#ffffff', '#ececec', 'external'),
   },
   boundary: { stroke: '#4b5563', fill: 'rgba(148,163,184,0.08)', text: '#374151' },
@@ -91,6 +94,7 @@ const classic: Theme = {
     containerFileShare: { ...compact.tokens.containerFileShare, fill: '#438dd5', stroke: '#2e6295' },
     containerOther: { ...compact.tokens.containerOther, fill: '#438dd5', stroke: '#2e6295' },
     component: { ...compact.tokens.component, fill: '#85bbf0', stroke: '#5d82a8' },
+    entity: { ...compact.tokens.entity, fill: '#b9d3f2', stroke: '#5d82a8' },
     externalSystem: { ...compact.tokens.externalSystem, fill: '#999999', stroke: '#6b6b6b' },
     externalContext: { ...compact.tokens.externalContext, fill: '#999999', stroke: '#6b6b6b' },
   },
@@ -114,6 +118,7 @@ const mono: Theme = {
     containerFileShare: token('folder', '#6b7280', '#4b5563', '#ffffff', '#e5e7eb', 'folder'),
     containerOther: token('rounded_box', '#6b7280', '#4b5563', '#ffffff', '#e5e7eb', 'store'),
     component: token('rounded_box', '#d1d5db', '#9ca3af', '#111827', '#374151', 'component'),
+    entity: token('card', '#e5e7eb', '#9ca3af', '#111827', '#4b5563', 'table'),
     externalContext: token('rounded_box', '#e5e7eb', '#9ca3af', '#111827', '#4b5563', 'external'),
   },
   edge: { stroke: '#374151', text: '#1f2937', projectedStroke: '#6b7280' },
@@ -127,6 +132,7 @@ export function tokenKeyFor(element: Element, isExternalContext: boolean): Token
   if (element.kind === 'softwareSystem') return 'softwareSystem'
   if (element.kind === 'externalSystem') return 'externalSystem'
   if (element.kind === 'component') return 'component'
+  if (element.kind === 'entity') return 'entity'
   if (effectiveCategory(element) === 'application') return 'containerApplication'
   const kinds: Record<DataStoreKind, TokenKey> = { database: 'containerDatabase', databaseSchema: 'containerSchema', pubSub: 'containerPubSub', queue: 'containerQueue', bucket: 'containerBucket', cache: 'containerCache', fileShare: 'containerFileShare', other: 'containerOther' }
   return kinds[element.dataStoreKind ?? 'other']

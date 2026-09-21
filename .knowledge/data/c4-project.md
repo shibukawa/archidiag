@@ -17,6 +17,7 @@ required:
   naming_policy: rule:physical-naming-policy selection and suggestion provider setting
   languages: business_language, system_language (requirement:ui-localization)
   style_theme: data:style-theme selection or customized copy
+  volume_horizon_months: horizon for data:entity-volume estimates, default 36
   domains: data:data-domain records (requirement:domain-dictionary)
   groups: data:group records (requirement:element-groups)
   perspectives: data:perspective and data:perspective-note records (requirement:perspectives)

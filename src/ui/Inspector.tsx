@@ -1,4 +1,5 @@
-import { ancestorIds, APPLICATION_KINDS, childrenOf, childViewKind, DATA_STORE_KINDS, effectiveCategory, LEVEL_BY_VIEW_KIND, SQL_STORE_KINDS, type ApplicationKind, type ContainerCategory, type DataStoreKind, type DiagramView, type Element, type Group, type Project, type Relationship, type SqlDialect } from '../core/model'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { ancestorIds, APPLICATION_KINDS, CARDINALITIES, childrenOf, childViewKind, DATA_STORE_KINDS, defaultErdRelationship, effectiveCategory, entitiesOfStore, ENTITY_CLASSIFICATIONS, ENTITY_STORAGES, ERD_RELATIONSHIP_KINDS, estimateVolume, formatBytes, formatCount, GROWTH_PERIODS, isErdRelationship, isErdStore, LEVEL_BY_VIEW_KIND, makeAttribute, REFRESH_EVERY, REFRESH_MODES, SQL_STORE_KINDS, type ApplicationKind, type Attribute, type Cardinality, type ContainerCategory, type DataStoreKind, type DiagramView, type Element, type EntityClassification, type EntityStorage, type EntityVolume, type ErdRelationshipKind, type GrowthPeriod, type Group, type Project, type RefreshEvery, type RefreshMode, type Relationship, type SqlDialect } from '../core/model'
 import { scopeElements } from '../core/views'
 import type { Copy } from './i18n'
 import { roleLabel } from './i18n'
@@ -10,14 +11,17 @@ export interface InspectorProps {
   selectedIds: Set<string>
   copy: Copy
   groups: Group[]
-  onPatchElement: (id: string, patch: Partial<Element>) => void
-  onPatchRelationship: (id: string, patch: Partial<Relationship>) => void
+  /** batchKey folds keystrokes into one undo step until onEndBatch (blur) is called. */
+  onPatchElement: (id: string, patch: Partial<Element>, batchKey?: string) => void
+  onPatchRelationship: (id: string, patch: Partial<Relationship>, batchKey?: string) => void
   onDeleteElements: (ids: string[]) => void
   onDeleteRelationship: (id: string) => void
   onOpenScope: (kind: DiagramView['kind'], scopeId: string | null) => void
-  onPatchView: (patch: Partial<DiagramView>) => void
+  onPatchView: (patch: Partial<DiagramView>, batchKey?: string) => void
   onCreateGroup: (name: string) => void
-  onPatchGroup: (id: string, patch: Partial<Group>) => void
+  onPatchGroup: (id: string, patch: Partial<Group>, batchKey?: string) => void
+  onEndBatch: () => void
+  onSetHorizon: (months: number) => void
   onDeleteGroup: (id: string) => void
   onCopyLink: () => void
   onSelect: (id: string) => void
@@ -61,7 +65,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-muted">{label}<div className="mt-1 normal-case tracking-normal">{children}</div></label>
 }
 
-function ElementEditor({ project, view, element, copy, groups, onPatchElement, onDeleteElements, onOpenScope, onSelect }: InspectorProps & { element: Element }) {
+function ElementEditor({ project, view, element, copy, groups, onPatchElement, onDeleteElements, onOpenScope, onSelect, onEndBatch, onSetHorizon }: InspectorProps & { element: Element }) {
   const kind = childViewKind(element)
   const related = Object.values(project.relationships).filter((relationship) => relationship.sourceId === element.id || relationship.targetId === element.id)
   const scopeGroups = groups.filter((group) => group.scopeId === (element.parentId ?? null))
@@ -71,9 +75,26 @@ function ElementEditor({ project, view, element, copy, groups, onPatchElement, o
         <span className="font-semibold">{roleLabel(copy, element)}</span>
         {kind && <button type="button" className="ml-auto flex items-center gap-1 text-cyan hover:underline" onClick={() => onOpenScope(kind, element.id)}><Icon name="external" size={12} />{copy.open}</button>}
       </div>
-      <Field label={copy.name}><input className="inspector-input" value={element.name} onChange={(event) => onPatchElement(element.id, { name: event.target.value })} /></Field>
-      <Field label={copy.description}><textarea className="inspector-input min-h-[72px]" value={element.description} onChange={(event) => onPatchElement(element.id, { description: event.target.value })} /></Field>
-      <Field label={copy.technology}><input className="inspector-input" value={element.technology} onChange={(event) => onPatchElement(element.id, { technology: event.target.value })} /></Field>
+      <Field label={copy.name}><input className="inspector-input" value={element.name} onChange={(event) => onPatchElement(element.id, { name: event.target.value }, `${element.id}:name`)} onBlur={onEndBatch} /></Field>
+      <Field label={copy.description}><textarea className="inspector-input min-h-[72px]" value={element.description} onChange={(event) => onPatchElement(element.id, { description: event.target.value }, `${element.id}:description`)} onBlur={onEndBatch} /></Field>
+      {element.kind !== 'entity' && <Field label={copy.technology}><input className="inspector-input" value={element.technology} onChange={(event) => onPatchElement(element.id, { technology: event.target.value }, `${element.id}:technology`)} onBlur={onEndBatch} /></Field>}
+      {isErdStore(element) && (() => {
+        const entities = entitiesOfStore(project, element.id)
+        const total = entities.reduce((sum, entity) => sum + (estimateVolume(entity.volume, project.settings.volumeHorizonMonths)?.bytes ?? 0), 0)
+        return <Field label={copy.storeTotal}><div className="text-xs">{formatBytes(total)} <span className="text-muted">· {copy.estimateAt(project.settings.volumeHorizonMonths)} · {entities.length} {copy.kinds.entity}</span></div></Field>
+      })()}
+      {element.kind === 'entity' && (
+        <>
+          <Field label={copy.classification}>
+            <RadioRow name={`classification-${element.id}`} value={element.classification ?? ''} options={[['', copy.noClassification], ...ENTITY_CLASSIFICATIONS.map((option) => [option, copy.classifications[option]] as [string, string])]} onChange={(value) => onPatchElement(element.id, { classification: (value || undefined) as EntityClassification | undefined })} />
+          </Field>
+          <Field label={copy.storageKind}>
+            <RadioRow name={`storage-${element.id}`} value={element.storageKind ?? 'table'} options={ENTITY_STORAGES.map((option) => [option, copy.storages[option]])} onChange={(value) => onPatchElement(element.id, { storageKind: value === 'table' ? undefined : (value as EntityStorage) })} />
+          </Field>
+          <FieldList element={element} copy={copy} onChange={(attributes, batchKey) => onPatchElement(element.id, { attributes }, batchKey)} onEndBatch={onEndBatch} />
+          <VolumeSection element={element} horizon={project.settings.volumeHorizonMonths} copy={copy} onChange={(volume, batchKey) => onPatchElement(element.id, { volume }, batchKey)} onEndBatch={onEndBatch} onSetHorizon={onSetHorizon} />
+        </>
+      )}
       {element.kind === 'container' && (
         <>
           <Field label={copy.containerCategory}>
@@ -140,9 +161,11 @@ function MultiSelection({ elements, copy, onDeleteElements }: InspectorProps & {
   )
 }
 
-function RelationshipEditor({ project, view, relationship, copy, onPatchRelationship, onDeleteRelationship, onSelect }: InspectorProps & { relationship: Relationship }) {
+function RelationshipEditor({ project, view, relationship, copy, onPatchRelationship, onDeleteRelationship, onSelect, onEndBatch }: InspectorProps & { relationship: Relationship }) {
   const source = project.elements[relationship.sourceId]
   const target = project.elements[relationship.targetId]
+  // Entity-to-entity lines carry the ERD record; an older project may lack it, so default it on the fly.
+  const erd = isErdRelationship(project, relationship) ? relationship.erd ?? defaultErdRelationship() : undefined
   const level = LEVEL_BY_VIEW_KIND[view.kind]
   const mapping = level === 'context' ? undefined : (relationship.viewEndpoints?.[level] ?? (level === 'component' ? relationship.viewEndpoints?.container : undefined))
   const effectiveSource = mapping?.sourceId ?? relationship.sourceId
@@ -166,9 +189,29 @@ function RelationshipEditor({ project, view, relationship, copy, onPatchRelation
         <span className="mx-1 text-muted">→</span>
         <button type="button" className="hover:text-cyan" onClick={() => onSelect(relationship.targetId)}>{target?.name}</button>
       </div>
-      <Field label={copy.label}><input className="inspector-input" value={relationship.label} onChange={(event) => onPatchRelationship(relationship.id, { label: event.target.value })} /></Field>
-      <Field label={copy.technology}><input className="inspector-input" value={relationship.technology ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { technology: event.target.value })} /></Field>
-      <Field label={copy.description}><textarea className="inspector-input min-h-[60px]" value={relationship.description ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { description: event.target.value })} /></Field>
+      <Field label={copy.label}><input className="inspector-input" value={relationship.label} onChange={(event) => onPatchRelationship(relationship.id, { label: event.target.value }, `${relationship.id}:label`)} onBlur={onEndBatch} /></Field>
+      {erd ? (
+        <>
+          <Field label={copy.erdKind}>
+            <RadioRow name={`erd-kind-${relationship.id}`} value={erd.kind} options={ERD_RELATIONSHIP_KINDS.map((option) => [option, copy.erdKinds[option]])} onChange={(value) => onPatchRelationship(relationship.id, { erd: { ...erd, kind: value as ErdRelationshipKind } })} />
+          </Field>
+          {erd.kind === 'reference' && (
+            <label className="mb-3 flex cursor-pointer items-center gap-2 text-xs"><input type="checkbox" className="checkbox checkbox-xs" checked={Boolean(erd.important)} onChange={(event) => onPatchRelationship(relationship.id, { erd: { ...erd, important: event.target.checked } })} />{copy.showOnCard}</label>
+          )}
+          {erd.kind !== 'label' && (
+            <Field label={copy.multiplicity}>
+              <div className="grid grid-cols-2 gap-2 text-[10px] text-muted">
+                <span>{source?.name} <span className="opacity-70">({copy.sourceEnd})</span><select className="inspector-input mt-1 py-1" value={erd.sourceCardinality} onChange={(event) => onPatchRelationship(relationship.id, { erd: { ...erd, sourceCardinality: event.target.value as Cardinality } })}>{CARDINALITIES.map((option) => <option key={option} value={option}>{option}</option>)}</select></span>
+                <span>{target?.name} <span className="opacity-70">({copy.targetEnd})</span><select className="inspector-input mt-1 py-1" value={erd.targetCardinality} onChange={(event) => onPatchRelationship(relationship.id, { erd: { ...erd, targetCardinality: event.target.value as Cardinality } })}>{CARDINALITIES.map((option) => <option key={option} value={option}>{option}</option>)}</select></span>
+              </div>
+              <p className="mt-1 text-[10px] leading-4 text-muted">{copy.erdHint}</p>
+            </Field>
+          )}
+        </>
+      ) : (
+        <Field label={copy.technology}><input className="inspector-input" value={relationship.technology ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { technology: event.target.value }, `${relationship.id}:technology`)} onBlur={onEndBatch} /></Field>
+      )}
+      <Field label={copy.description}><textarea className="inspector-input min-h-[60px]" value={relationship.description ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { description: event.target.value }, `${relationship.id}:description`)} onBlur={onEndBatch} /></Field>
       {siblingsOnLine.length > 0 && (
         <div className="mb-3">
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.sameLine}</div>
@@ -194,7 +237,7 @@ function RelationshipEditor({ project, view, relationship, copy, onPatchRelation
   )
 }
 
-function ViewEditor({ project, view, copy, groups, onPatchView, onCreateGroup, onPatchGroup, onDeleteGroup }: InspectorProps) {
+function ViewEditor({ project, view, copy, groups, onPatchView, onCreateGroup, onPatchGroup, onDeleteGroup, onEndBatch }: InspectorProps) {
   const scoped = scopeElements(project, { ...view, elementRefs: [] })
   const shown = new Set(view.elementRefs.length ? view.elementRefs : scoped.map((element) => element.id))
   const toggle = (id: string) => {
@@ -206,8 +249,8 @@ function ViewEditor({ project, view, copy, groups, onPatchView, onCreateGroup, o
   return (
     <div>
       <div className="mb-3 text-xs text-muted">{copy.selectHint}</div>
-      <Field label={copy.viewName}><input className="inspector-input" value={view.name} onChange={(event) => onPatchView({ name: event.target.value })} placeholder={copy.defaultView} /></Field>
-      <Field label={copy.description}><textarea className="inspector-input min-h-[56px]" value={view.description} onChange={(event) => onPatchView({ description: event.target.value })} /></Field>
+      <Field label={copy.viewName}><input className="inspector-input" value={view.name} onChange={(event) => onPatchView({ name: event.target.value }, `${view.id}:name`)} onBlur={onEndBatch} placeholder={copy.defaultView} /></Field>
+      <Field label={copy.description}><textarea className="inspector-input min-h-[56px]" value={view.description} onChange={(event) => onPatchView({ description: event.target.value }, `${view.id}:description`)} onBlur={onEndBatch} /></Field>
       <div className="mb-4">
         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.showInView} · {shown.size}/{scoped.length}</div>
         {scoped.map((element) => (
@@ -223,11 +266,138 @@ function ViewEditor({ project, view, copy, groups, onPatchView, onCreateGroup, o
       </div>
       {scopeGroups.map((group) => (
         <div key={group.id} className="mb-1 flex items-center gap-1">
-          <input className="inspector-input py-1 text-xs" value={group.name} onChange={(event) => onPatchGroup(group.id, { name: event.target.value })} />
+          <input className="inspector-input py-1 text-xs" value={group.name} onChange={(event) => onPatchGroup(group.id, { name: event.target.value }, `${group.id}:name`)} onBlur={onEndBatch} />
           <input type="color" className="h-7 w-7 cursor-pointer rounded border border-line bg-transparent" value={group.color ?? '#9ca3af'} onChange={(event) => onPatchGroup(group.id, { color: event.target.value })} title={copy.group} />
           <button type="button" className="grid h-7 w-7 place-items-center rounded text-muted hover:bg-rose-500/10 hover:text-rose-400" onClick={() => onDeleteGroup(group.id)} title={copy.deleteGroup}><Icon name="trash" size={13} /></button>
         </div>
       ))}
+    </div>
+  )
+}
+
+/**
+ * Entity field list: every attribute with its flags, quick entry that keeps focus (flow: erd-authoring),
+ * and an important-only filter. The canvas draws only the important rows (decision: important-fields-on-canvas).
+ */
+function FieldList({ element, copy, onChange, onEndBatch }: { element: Element; copy: Copy; onChange: (attributes: Attribute[], batchKey?: string) => void; onEndBatch: () => void }) {
+  const attributes = element.attributes ?? []
+  const [name, setName] = useState('')
+  const [importantOnly, setImportantOnly] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const composing = useRef(false)
+  useEffect(() => { setOpenId(null) }, [element.id])
+  const update = (id: string, patch: Partial<Attribute>, batchKey?: string) => onChange(attributes.map((attribute) => (attribute.id === id ? { ...attribute, ...patch } : attribute)), batchKey)
+  const remove = (id: string) => onChange(attributes.filter((attribute) => attribute.id !== id))
+  const move = (id: string, delta: -1 | 1) => {
+    const next = [...attributes]
+    const index = next.findIndex((attribute) => attribute.id === id)
+    const target = index + delta
+    if (index < 0 || target < 0 || target >= next.length) return
+    ;[next[index], next[target]] = [next[target], next[index]]
+    onChange(next)
+  }
+  const add = () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    onChange([...attributes, makeAttribute(trimmed)])
+    setName('')
+    inputRef.current?.focus()
+  }
+  const onKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !composing.current && !event.nativeEvent.isComposing) { event.preventDefault(); add() }
+  }
+  const shown = importantOnly ? attributes.filter((attribute) => attribute.important) : attributes
+  const flag = (id: string, key: 'important' | 'primaryKey' | 'required' | 'unique', value: boolean, label: string, title: string) => (
+    <button type="button" title={title} onClick={() => update(id, key === 'primaryKey' && !value ? { primaryKey: true, important: true, required: true, unique: true } : { [key]: !value })} className={`rounded px-1 text-[9px] font-bold leading-4 ${value ? (key === 'important' ? 'bg-amber/25 text-amber' : 'bg-cyan/15 text-cyan') : 'text-muted/60 hover:text-muted'}`}>{label}</button>
+  )
+  return (
+    <div className="mb-3">
+      <div className="mb-1 flex items-center justify-between">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.fields} · {attributes.filter((attribute) => attribute.important).length}/{attributes.length}</div>
+        <label className="flex cursor-pointer items-center gap-1 text-[10px] text-muted"><input type="checkbox" className="checkbox checkbox-xs" checked={importantOnly} onChange={(event) => setImportantOnly(event.target.checked)} />{copy.importantOnly}</label>
+      </div>
+      <div className="rounded-lg border border-line bg-ink/40">
+        {shown.map((attribute, index) => (
+          <div key={attribute.id} className={`border-b border-line/60 px-2 py-1 last:border-b-0 ${attribute.important ? '' : 'opacity-75'}`}>
+            <div className="flex items-center gap-1">
+              <input type="checkbox" className="checkbox checkbox-xs" checked={attribute.important} title={copy.important} onChange={(event) => update(attribute.id, { important: event.target.checked })} />
+              {attribute.primaryKey && <Icon name="key" size={11} className="shrink-0 text-cyan" />}
+              <input className="min-w-0 flex-1 bg-transparent text-xs text-base-content outline-none" value={attribute.name} onChange={(event) => update(attribute.id, { name: event.target.value }, `${attribute.id}:name`)} onBlur={onEndBatch} onFocus={() => setOpenId(attribute.id)} />
+              {flag(attribute.id, 'primaryKey', attribute.primaryKey, copy.primaryKey, copy.primaryKey)}
+              {flag(attribute.id, 'required', attribute.required, '!', copy.required)}
+              {flag(attribute.id, 'unique', attribute.unique, 'U', copy.unique)}
+              <button type="button" className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-white/10 hover:text-base-content" onClick={() => setOpenId(openId === attribute.id ? null : attribute.id)} title={copy.fieldDescription}><Icon name={openId === attribute.id ? 'chevronDown' : 'chevron'} size={11} /></button>
+            </div>
+            {openId === attribute.id && (
+              <div className="mt-1 flex items-start gap-1 pl-5">
+                <textarea className="inspector-input min-h-[40px] flex-1 py-1 text-xs" placeholder={copy.fieldDescription} value={attribute.description} onChange={(event) => update(attribute.id, { description: event.target.value }, `${attribute.id}:description`)} onBlur={onEndBatch} />
+                <div className="flex flex-col gap-0.5">
+                  <button type="button" className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-white/10 disabled:opacity-30" title={copy.moveUp} disabled={index === 0 || importantOnly} onClick={() => move(attribute.id, -1)}><Icon name="arrowUp" size={11} /></button>
+                  <button type="button" className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-white/10 disabled:opacity-30" title={copy.moveDown} disabled={index === shown.length - 1 || importantOnly} onClick={() => move(attribute.id, 1)}><Icon name="arrowDown" size={11} /></button>
+                  <button type="button" className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-rose-500/10 hover:text-rose-400" title={copy.deleteField} onClick={() => remove(attribute.id)}><Icon name="trash" size={11} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        <div className="px-2 py-1">
+          <input
+            ref={inputRef}
+            className="w-full bg-transparent text-xs text-base-content outline-none placeholder:text-muted/60"
+            placeholder={copy.addField}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={onKey}
+            onCompositionStart={() => { composing.current = true }}
+            onCompositionEnd={() => { composing.current = false }}
+          />
+        </div>
+      </div>
+      <p className="mt-1 text-[10px] leading-4 text-muted">{copy.addFieldHint}</p>
+    </div>
+  )
+}
+
+/** Volume assumptions and the derived estimate (requirement: data-volume-estimation). Numbers commit per keystroke in one undo batch. */
+function VolumeSection({ element, horizon, copy, onChange, onEndBatch, onSetHorizon }: { element: Element; horizon: number; copy: Copy; onChange: (volume: EntityVolume, batchKey?: string) => void; onEndBatch: () => void; onSetHorizon: (months: number) => void }) {
+  const volume = element.volume ?? {}
+  const estimate = estimateVolume(volume, horizon)
+  const number = (key: keyof EntityVolume, label: string) => (
+    <label className="block text-[10px] text-muted">{label}
+      <input type="number" min="0" className="inspector-input mt-0.5 py-1 text-xs" value={volume[key] ?? ''} onChange={(event) => onChange({ ...volume, [key]: event.target.value === '' ? undefined : Number(event.target.value) }, `${element.id}:volume:${key}`)} onBlur={onEndBatch} />
+    </label>
+  )
+  return (
+    <div className="mb-3">
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.volume}</div>
+      <div className="grid grid-cols-2 gap-2">
+        {number('recordBytes', copy.recordBytes)}
+        {number('initialRows', copy.initialRows)}
+        {number('growthRows', copy.growthRows)}
+        <label className="block text-[10px] text-muted">{copy.per}
+          <select className="inspector-input mt-0.5 py-1 text-xs" value={volume.growthPeriod ?? 'day'} onChange={(event) => onChange({ ...volume, growthPeriod: event.target.value as GrowthPeriod })}>{GROWTH_PERIODS.map((option) => <option key={option} value={option}>{copy.growthPeriods[option]}</option>)}</select>
+        </label>
+        <label className="block text-[10px] text-muted">{copy.refreshMode}
+          <select className="inspector-input mt-0.5 py-1 text-xs" value={volume.refreshMode ?? 'append'} onChange={(event) => onChange({ ...volume, refreshMode: event.target.value as RefreshMode })}>{REFRESH_MODES.map((option) => <option key={option} value={option}>{copy.refreshModes[option]}</option>)}</select>
+        </label>
+        <label className="block text-[10px] text-muted">{copy.refreshEvery}
+          <select className="inspector-input mt-0.5 py-1 text-xs" value={volume.refreshEvery ?? 'daily'} onChange={(event) => onChange({ ...volume, refreshEvery: event.target.value as RefreshEvery })}>{REFRESH_EVERY.map((option) => <option key={option} value={option}>{copy.refreshEveries[option]}</option>)}</select>
+        </label>
+        <div className="col-span-2">{number('retentionMonths', copy.retentionMonths)}</div>
+        <label className="col-span-2 block text-[10px] text-muted">{copy.horizon}
+          <input type="number" min="1" className="inspector-input mt-0.5 py-1 text-xs" value={horizon} onChange={(event) => onSetHorizon(Math.max(1, Number(event.target.value) || 1))} />
+        </label>
+      </div>
+      <div className="mt-2 rounded-lg border border-line bg-ink/40 px-3 py-2 text-xs">
+        <div className="text-[10px] uppercase tracking-wider text-muted">{copy.estimateAt(horizon)}</div>
+        {estimate ? (
+          <>
+            <div className="mt-0.5 text-sm font-semibold">{formatBytes(estimate.bytes)} <span className="text-xs font-normal text-muted">· {formatCount(estimate.rows)} {copy.rowsLabel}</span></div>
+            <div className="text-[10px] text-muted">{formatCount(estimate.dailyWriteRows)} {copy.dailyWrites} · {copy.excludesIndexes}</div>
+          </>
+        ) : <div className="mt-0.5 text-[10px] text-muted">{copy.noEstimate}</div>}
+      </div>
     </div>
   )
 }

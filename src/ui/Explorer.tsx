@@ -20,6 +20,7 @@ const iconFor = (element: Element): IconName => {
   if (element.kind === 'softwareSystem') return 'globe'
   if (element.kind === 'externalSystem') return 'external'
   if (element.kind === 'component') return 'layers'
+  if (element.kind === 'entity') return 'table'
   return effectiveCategory(element) === 'dataStore' ? 'database' : 'box'
 }
 

@@ -1,7 +1,11 @@
-import type { DisplayMode, Position, Rect } from './model'
+import { cardRows, type DisplayMode, type Element, type Position, type Project, type Rect } from './model'
 
 export const NODE_WIDTH = 220
-export const NODE_HEIGHTS: Record<DisplayMode, number> = { compact: 76, technology_only: 92, descriptive: 124 }
+export const NODE_HEIGHTS: Record<DisplayMode, number> = { compact: 76, technology_only: 92, descriptive: 124, fields: 76 }
+/** Entity card metrics in fields mode: header band, one line per shown attribute, a footer for hidden ones. */
+export const CARD_HEADER = 40
+export const CARD_ROW = 16
+export const CARD_PADDING = 8
 export const CANVAS_MIN_WIDTH = 1200
 export const CANVAS_MIN_HEIGHT = 620
 export const DEFAULT_BOUNDARY: Rect = { x: 300, y: 60, width: 640, height: 460 }
@@ -24,6 +28,49 @@ export function fitOuterBoundary(inner: Rect, siblings: Rect[]): Rect {
 
 export function nodeSize(mode: DisplayMode) {
   return { width: NODE_WIDTH, height: NODE_HEIGHTS[mode] }
+}
+
+export const CARD_MAX_WIDTH = 420
+/** Approximate glyph widths per text unit (a CJK character counts as two units). */
+export const ROW_UNIT = 6.6
+/** Left inset of a row, extra inset after the key icon, and right inset (wider when a required star sits there). */
+export const ROW_INSET = 14
+export const ROW_KEY_INSET = 12
+export function rowRightInset(required: boolean) { return required ? 20 : 14 }
+/** Characters that fit on one attribute row of a card this wide. */
+export function rowChars(width: number, primaryKey: boolean, required: boolean) {
+  return Math.max(4, Math.floor((width - ROW_INSET - (primaryKey ? ROW_KEY_INSET : 0) - rowRightInset(required)) / ROW_UNIT))
+}
+export const TITLE_UNIT = 7.6
+
+/** Width units of a string: one per Latin character, two per CJK character. */
+export function textUnits(value: string) {
+  return [...value].reduce((sum, char) => sum + (/[\u3000-\u9fff\uff00-\uffef]/.test(char) ? 2 : 1), 0)
+}
+
+/** Entity cards widen to fit the name and, in fields mode, the longest shown row; C4 nodes keep the fixed width. */
+export function referenceRowText(row: { label: string; targetName: string }) {
+  return row.label ? `${row.targetName} · ${row.label}` : row.targetName
+}
+
+export function cardWidthFor(element: Element, mode: DisplayMode, project?: Project) {
+  const title = 44 + textUnits(element.name) * TITLE_UNIT
+  const { shown, references } = mode === 'fields' ? cardRows(element, project) : { shown: [], references: [] }
+  const rows = [
+    ...shown.map((attribute) => ROW_INSET + (attribute.primaryKey ? ROW_KEY_INSET : 0) + textUnits(attribute.name) * ROW_UNIT + rowRightInset(attribute.required)),
+    ...references.map((row) => ROW_INSET + ROW_KEY_INSET + textUnits(referenceRowText(row)) * ROW_UNIT + rowRightInset(false)),
+  ]
+  return Math.round(Math.min(CARD_MAX_WIDTH, Math.max(NODE_WIDTH, title, ...rows)))
+}
+
+/** Uniform size for C4 elements; entity cards grow with their content. The project supplies reference rows. */
+export function nodeSizeFor(element: Element, mode: DisplayMode, project?: Project) {
+  if (element.kind !== 'entity') return nodeSize(mode)
+  const width = cardWidthFor(element, mode, project)
+  if (mode !== 'fields') return { width, height: NODE_HEIGHTS[mode] }
+  const { shown, references, hidden } = cardRows(element, project)
+  const rows = shown.length + references.length + (hidden > 0 || shown.length === 0 ? 1 : 0)
+  return { width, height: Math.max(NODE_HEIGHTS.compact, CARD_HEADER + CARD_PADDING + rows * CARD_ROW + CARD_PADDING) }
 }
 
 export function overlaps(a: Rect, b: Rect, margin = 0) {

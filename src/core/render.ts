@@ -1,12 +1,14 @@
 import { arrangeView } from './arrange'
-import { CANVAS_MIN_HEIGHT, CANVAS_MIN_WIDTH, expandBoundaryToContain, fitBoundary, fitOuterBoundary, nodeSize, overlaps, pad, union } from './layout'
-import type { DiagramView, Element, Group, Position, Project, Rect } from './model'
+import { CANVAS_MIN_HEIGHT, CANVAS_MIN_WIDTH, CARD_HEADER, CARD_PADDING, CARD_ROW, expandBoundaryToContain, fitBoundary, fitOuterBoundary, nodeSize, nodeSizeFor, overlaps, pad, referenceRowText, rowChars, TITLE_UNIT, union } from './layout'
+import { cardRows, dependentsOf, isViewStorage, type DiagramView, type Element, type ErdRelationshipKind, type Group, type Position, type Project, type Rect } from './model'
 import { pathData, routeEdges, type Route } from './routing'
 import { tokenFor, tokenKeyFor, type IconKind, type Theme, type Token, type TokenKey } from './theme'
 import { projectRelationships, visibleElements, type ProjectedRelationship } from './views'
 
 export interface RenderLabels {
   kind: (element: Element, isExternal: boolean) => string
+  /** Entity storage kind for the technology brackets, for example "Table" (decision: storage-kind-as-technology). */
+  storage: (element: Element) => string
   boundary: string
   /** Kind tag drawn under the boundary name, for example "[Software System]". */
   boundaryKind?: string
@@ -26,7 +28,15 @@ export interface RenderLabels {
     externalContext: string
     kinds: Record<TokenKey, string>
     applicationKinds: Record<string, string>
+    /** ERD line kinds, keyed by data:entity-relationship kind. */
+    erdKinds: Record<ErdRelationshipKind, string>
+    /** Legend line for view and materialized view cards, drawn dashed. */
+    entityView: string
   }
+  /** Footer row of an entity card counting the attributes not drawn. */
+  moreFields: (count: number) => string
+  /** Compact entity cards show the field count instead of rows. */
+  fieldCount: (count: number) => string
 }
 
 export type Placement = 'internal' | 'sibling' | 'external'
@@ -58,10 +68,11 @@ export interface RenderGroup {
 export interface LegendEntry {
   id: string
   label: string
-  swatch: { kind: 'node'; token: Token } | { kind: 'edge'; projected: boolean; boundary?: boolean } | { kind: 'boundary' } | { kind: 'outerBoundary' } | { kind: 'group' }
+  swatch: { kind: 'node'; token: Token; dashed?: boolean } | { kind: 'edge'; projected: boolean; boundary?: boolean; erdKind?: ErdRelationshipKind } | { kind: 'boundary' } | { kind: 'outerBoundary' } | { kind: 'group' }
 }
 
 export interface RenderModel {
+  project: Project
   view: DiagramView
   theme: Theme
   labels: RenderLabels
@@ -93,7 +104,7 @@ export function buildRenderModel(project: Project, view: DiagramView, theme: The
   const internalNodes: RenderNode[] = internal.map((element, index) => ({
     id: element.id,
     element,
-    rect: positions[element.id] ? { ...positions[element.id], ...size } : { x: 340 + (index % 3) * (size.width + 80), y: 100 + Math.floor(index / 3) * (size.height + 48), ...size },
+    rect: positions[element.id] ? { ...positions[element.id], ...nodeSizeFor(element, view.displayMode, project) } : { x: 340 + (index % 3) * (size.width + 80), y: 100 + Math.floor(index / 3) * (size.height + 48), ...nodeSizeFor(element, view.displayMode, project) },
     token: tokenFor(theme, element, false),
     tokenKey: tokenKeyFor(element, false),
     isExternal: false,
@@ -167,7 +178,7 @@ export function buildRenderModel(project: Project, view: DiagramView, theme: The
   const frameTop = content.y + content.height + 32
   const width = Math.max(CANVAS_MIN_WIDTH, content.x + content.width + 80, content.x + 380 + 40 + legendWidth + 80)
   const height = Math.max(CANVAS_MIN_HEIGHT, frameTop + Math.max(FRAME_HEIGHT, legendBoxHeight(legend)) + 40)
-  return { view, theme, labels, nodes, edges, groups, boundary, outerBoundary, legend, size: { width, height } }
+  return { project, view, theme, labels, nodes, edges, groups, boundary, outerBoundary, legend, size: { width, height } }
 }
 
 export { fitOuterBoundary } from './layout'
@@ -210,8 +221,12 @@ function buildLegend(nodes: RenderNode[], edges: RenderEdge[], boundary: Rect | 
     const label = appKind ? labels.legend.applicationKinds[appKind] ?? labels.legend.kinds[node.tokenKey] : labels.legend.kinds[node.tokenKey]
     entries.push({ id: key, label, swatch: { kind: 'node', token: node.token } })
   })
+  const viewNode = nodes.find((node) => !node.isExternal && node.element.kind === 'entity' && isViewStorage(node.element))
+  if (viewNode) entries.push({ id: 'entityView', label: labels.legend.entityView, swatch: { kind: 'node', token: viewNode.token, dashed: true } })
   if (nodes.some((node) => node.isExternal)) entries.push({ id: 'externalContext', label: labels.legend.externalContext, swatch: { kind: 'node', token: nodes.find((node) => node.isExternal)!.token } })
-  if (edges.some((edge) => !edge.relationship.projected)) entries.push({ id: 'relationship', label: labels.legend.relationship, swatch: { kind: 'edge', projected: false } })
+  const erdKinds = [...new Set(edges.map((edge) => edge.relationship.erd?.kind).filter((kind): kind is ErdRelationshipKind => Boolean(kind)))]
+  erdKinds.forEach((kind) => entries.push({ id: `erd:${kind}`, label: labels.legend.erdKinds[kind], swatch: { kind: 'edge', projected: false, erdKind: kind } }))
+  if (edges.some((edge) => !edge.relationship.projected && !edge.relationship.erd)) entries.push({ id: 'relationship', label: labels.legend.relationship, swatch: { kind: 'edge', projected: false } })
   if (edges.some((edge) => edge.relationship.projected)) entries.push({ id: 'projected', label: labels.legend.projectedRelationship, swatch: { kind: 'edge', projected: true } })
   if (boundary) entries.push({ id: 'boundary', label: labels.legend.boundary, swatch: { kind: 'boundary' } })
   if (outerBoundary) entries.push({ id: 'outerBoundary', label: labels.legend.outerBoundary, swatch: { kind: 'outerBoundary' } })
@@ -287,6 +302,7 @@ export function renderSvg(model: RenderModel, options: SvgOptions): string {
   parts.push(`<defs>
 <marker id="c4-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="${theme.edge.stroke}"/></marker>
 <marker id="c4-arrow-hollow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.5 L9.5,5 L0.5,9.5 z" fill="${theme.background}" stroke="${theme.edge.projectedStroke}" stroke-width="1.2"/></marker>
+${erdMarkerDefs(theme)}
 </defs>`)
   if (options.background) parts.push(`<rect width="100%" height="100%" fill="${theme.background}"/>`)
   if (model.outerBoundary) {
@@ -307,19 +323,30 @@ export function renderSvg(model: RenderModel, options: SvgOptions): string {
     parts.push(`<g data-role="group" data-group-id="${escapeXml(group.id)}"><rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="10" fill="${tint}" fill-opacity="${group.group.color ? 0.12 : 1}" stroke="${theme.group.stroke}" stroke-width="1.2" stroke-dasharray="5 4"/><text x="${r.x + 10}" y="${r.y + 15}" fill="${theme.group.text}" font-size="11" font-weight="700">${escapeXml(group.group.name)}</text></g>`)
   })
   model.edges.forEach((edge) => {
+    const erd = edge.relationship.erd
     const stroke = edge.relationship.projected ? theme.edge.projectedStroke : theme.edge.stroke
-    const marker = edge.relationship.projected ? 'c4-arrow-hollow' : 'c4-arrow'
-    const dash = ''
+    const marker = erd ? ERD_MARKERS[erd.kind] : edge.relationship.projected ? 'c4-arrow-hollow' : 'c4-arrow'
+    const dash = erd?.kind === 'label' ? ' stroke-dasharray="6 4"' : ''
     const labelLines = edge.relationship.label.split('\n').filter(Boolean)
-    const technology = edge.relationship.technology ? `[${edge.relationship.technology}]` : ''
+    const technology = !erd && edge.relationship.technology ? `[${edge.relationship.technology}]` : ''
     const lines = technology ? [...labelLines, technology] : labelLines
     const at = edge.route.labelAt
     const lineCount = Math.max(1, lines.length)
     const labelWidth = Math.max(...lines.map((line) => line.length), 4) * 6.2 + 12
     const selected = edge.relationship.mergedIds.some((id) => options.selectedIds?.has(id))
     parts.push(`<g data-role="edge" data-edge-id="${escapeXml(edge.id)}"${options.interactive ? ' style="cursor:pointer"' : ''}>`)
-    parts.push(`<path d="${pathData(edge.route.points)}" fill="none" stroke="${selected ? '#2563eb' : stroke}" stroke-width="${selected ? 2.4 : 1.5}"${dash} marker-end="url(#${marker})"/>`)
+    parts.push(`<path d="${pathData(edge.route.points)}" fill="none" stroke="${selected ? '#2563eb' : stroke}" stroke-width="${selected ? 2.4 : 1.5}"${dash}${marker ? ` marker-end="url(#${marker})"` : ''}/>`)
     if (options.interactive) parts.push(`<path d="${pathData(edge.route.points)}" fill="none" stroke="transparent" stroke-width="14"/>`)
+    // UML multiplicity at both ends (term: erd-notation); label kind carries none.
+    if (erd && erd.kind !== 'label') {
+      const points = edge.route.points
+      const sourceAt = endLabelAt(points[0], points[1], 18)
+      const targetAt = endLabelAt(points[points.length - 1], points[points.length - 2], 26)
+      ;[[sourceAt, erd.sourceCardinality], [targetAt, erd.targetCardinality]].forEach(([at, text]) => {
+        const position = at as { x: number; y: number; anchor: string }
+        parts.push(`<text x="${position.x}" y="${position.y}" text-anchor="${position.anchor}" fill="${theme.edge.text}" font-size="10" font-weight="600">${escapeXml(String(text))}</text>`)
+      })
+    }
     if (lines.length) {
       const top = at.y - 8 - (lineCount - 1) * 6
       parts.push(`<rect x="${at.x - labelWidth / 2}" y="${top}" width="${labelWidth}" height="${14 + (lineCount - 1) * 12}" rx="3" fill="${theme.background}" fill-opacity="0.92"/>`)
@@ -334,6 +361,28 @@ export function renderSvg(model: RenderModel, options: SvgOptions): string {
   parts.push(inlineFrame)
   parts.push('</svg>')
   return parts.join('\n')
+}
+
+const ERD_MARKERS: Record<ErdRelationshipKind, string | undefined> = { reference: 'erd-open', dependent: 'erd-diamond', inherit: 'erd-triangle', label: undefined }
+
+function erdMarkerDefs(theme: Theme) {
+  return [
+    `<marker id="erd-open" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M1,1 L11,6 L1,11" fill="none" stroke="${theme.edge.stroke}" stroke-width="1.4"/></marker>`,
+    `<marker id="erd-triangle" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M1,1 L13,7 L1,13 z" fill="${theme.background}" stroke="${theme.edge.stroke}" stroke-width="1.4"/></marker>`,
+    `<marker id="erd-diamond" markerWidth="16" markerHeight="12" refX="15" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M1,6 L8,1 L15,6 L8,11 z" fill="${theme.edge.stroke}" stroke="${theme.edge.stroke}" stroke-width="1"/></marker>`,
+  ].join('\n')
+}
+
+/** A multiplicity label sits a little way along the edge from its port, beside the line rather than on it. */
+function endLabelAt(port: Position, next: Position, distance: number): { x: number; y: number; anchor: 'start' | 'end' | 'middle' } {
+  const dx = next.x - port.x
+  const dy = next.y - port.y
+  const length = Math.hypot(dx, dy) || 1
+  const along = Math.min(distance, length / 2)
+  const x = port.x + (dx / length) * along
+  const y = port.y + (dy / length) * along
+  if (Math.abs(dx) >= Math.abs(dy)) return { x, y: y - 5, anchor: 'middle' }
+  return { x: x + 6, y: y + 4, anchor: 'start' }
 }
 
 function shapePath(shape: Token['shape'], r: Rect): string {
@@ -352,10 +401,12 @@ function shapePath(shape: Token['shape'], r: Rect): string {
     return `M ${r.x} ${r.y + ry} a ${r.width / 2} ${ry} 0 0 1 ${r.width} 0 L ${r.x + r.width - inset} ${r.y + r.height - ry} a ${r.width / 2 - inset} ${ry} 0 0 1 -${r.width - inset * 2} 0 z`
   }
   if (shape === 'browser_window' || shape === 'desktop_window') {
-    return `M ${r.x + 10} ${r.y} h ${r.width - 20} a 10 10 0 0 1 10 10 v ${r.height - 20} a 10 10 0 0 1 -10 10 h -${r.width - 20} a 10 10 0 0 1 -10 -10 v -${r.height - 20} a 10 10 0 0 1 10 -10 z`
+    const c = Math.min(10, r.height / 2)
+    return `M ${r.x + c} ${r.y} h ${r.width - c * 2} a ${c} ${c} 0 0 1 ${c} ${c} v ${r.height - c * 2} a ${c} ${c} 0 0 1 -${c} ${c} h -${r.width - c * 2} a ${c} ${c} 0 0 1 -${c} -${c} v -${r.height - c * 2} a ${c} ${c} 0 0 1 ${c} -${c} z`
   }
   if (shape === 'mobile_device') {
-    return `M ${r.x + 16} ${r.y} h ${r.width - 32} a 16 16 0 0 1 16 16 v ${r.height - 32} a 16 16 0 0 1 -16 16 h -${r.width - 32} a 16 16 0 0 1 -16 -16 v -${r.height - 32} a 16 16 0 0 1 16 -16 z`
+    const c = Math.min(16, r.height / 2)
+    return `M ${r.x + c} ${r.y} h ${r.width - c * 2} a ${c} ${c} 0 0 1 ${c} ${c} v ${r.height - c * 2} a ${c} ${c} 0 0 1 -${c} ${c} h -${r.width - c * 2} a ${c} ${c} 0 0 1 -${c} -${c} v -${r.height - c * 2} a ${c} ${c} 0 0 1 ${c} -${c} z`
   }
   if (shape === 'folder') {
     const tab = 12
@@ -369,6 +420,7 @@ function renderNode(model: RenderModel, node: RenderNode, options: SvgOptions): 
   const { rect: r, token, element } = node
   const selected = options.selectedIds?.has(node.id)
   const mode = model.view.displayMode
+  if (token.shape === 'card') return renderEntityCard(model, node, options)
   const parts: string[] = []
   parts.push(`<g data-role="node" data-node-id="${escapeXml(node.id)}"${options.interactive ? ' style="cursor:grab"' : ''}>`)
   const strokeWidth = selected ? 3 : 1.4
@@ -423,7 +475,7 @@ function renderNode(model: RenderModel, node: RenderNode, options: SvgOptions): 
   if (mode === 'descriptive' && element.description.trim()) {
     const available = Math.max(1, Math.floor((r.y + r.height - 8 - y) / 12))
     wrapText(element.description, 34, Math.min(3, available)).forEach((line) => {
-      parts.push(`<text x="${textX}" y="${y}" text-anchor="middle" fill="${token.subtext}" font-size="10">${escapeXml(line)}</text>`)
+      parts.push(`<text x="${r.x + 12}" y="${y}" fill="${token.subtext}" font-size="10">${escapeXml(line)}</text>`)
       y += 12
     })
   }
@@ -431,10 +483,75 @@ function renderNode(model: RenderModel, node: RenderNode, options: SvgOptions): 
   return parts.join('')
 }
 
-function iconSvg(icon: IconKind, x: number, y: number, color: string): string {
+/**
+ * Entity card: a header band with the name and kind tag over a body that shows, by display mode, the
+ * description (descriptive), the important attribute rows (fields), or the field count (compact).
+ */
+function renderEntityCard(model: RenderModel, node: RenderNode, options: SvgOptions): string {
+  const { rect: r, token, element } = node
+  const { theme } = model
+  const selected = options.selectedIds?.has(node.id)
+  // Context entities outside the boundary stay collapsed (rule: external-context-boundary).
+  const mode = node.isExternal ? 'compact' : model.view.displayMode
+  const strokeWidth = selected ? 3 : 1.4
+  const stroke = selected ? '#2563eb' : token.stroke
+  const dependents = dependentsOf(model.project, element.id).length
+  const parts: string[] = []
+  parts.push(`<g data-role="node" data-node-id="${escapeXml(node.id)}"${options.interactive ? ' style="cursor:grab"' : ''}>`)
+  // Views and materialized views are derived, so their outline is dashed (rule: diagram-styles).
+  const dashed = isViewStorage(element) ? ' stroke-dasharray="6 4"' : ''
+  parts.push(`<rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="4" fill="${theme.background}" stroke="${stroke}" stroke-width="${strokeWidth}"${dashed}/>`)
+  parts.push(`<path d="M ${r.x} ${r.y + 4} a 4 4 0 0 1 4 -4 h ${r.width - 8} a 4 4 0 0 1 4 4 v ${CARD_HEADER - 4} h -${r.width} z" fill="${token.fill}"/>`)
+  parts.push(`<path d="M ${r.x} ${r.y + CARD_HEADER} h ${r.width}" stroke="${stroke}" stroke-width="1"/>`)
+  parts.push(iconSvg(token.icon, r.x + 10, r.y + 15, token.text))
+  // Dependent count badge: the owner card says how many tables hide behind it (term: erd-notation).
+  if (dependents > 0) {
+    const bx = r.x + r.width - 38
+    parts.push(`<rect x="${bx}" y="${r.y + 6}" width="30" height="14" rx="7" fill="${token.stroke}" opacity="0.25"/>`)
+    parts.push(iconSvg('table', bx + 5, r.y + 15, token.text))
+    parts.push(`<text x="${bx + 24}" y="${r.y + 16.5}" text-anchor="end" fill="${token.text}" font-size="9.5" font-weight="700">${dependents}</text>`)
+  }
+  const textX = r.x + r.width / 2
+  const nameLines = wrapText(element.name, Math.floor((r.width - 40 - (dependents ? 40 : 0)) / TITLE_UNIT), 1)
+  parts.push(`<text x="${textX}" y="${r.y + 17}" text-anchor="middle" fill="${token.text}" font-size="13" font-weight="700">${escapeXml(nameLines[0] ?? '')}</text>`)
+  const kindLabel = model.labels.kind(element, node.isExternal)
+  const kindLine = mode === 'compact' ? kindLabel : `[${model.labels.storage(element)}] ${kindLabel}`
+  parts.push(`<text x="${textX}" y="${r.y + 31}" text-anchor="middle" fill="${token.subtext}" font-size="9.5" letter-spacing="0.3">${escapeXml(kindLine)}</text>`)
+  const attributes = element.attributes ?? []
+  let y = r.y + CARD_HEADER + CARD_PADDING + 11
+  if (mode === 'fields') {
+    const { shown, references, hidden } = cardRows(element, model.project)
+    shown.forEach((attribute) => {
+      const keyed = attribute.primaryKey
+      if (keyed) parts.push(iconSvg('key', r.x + 10, y + 1, token.subtext))
+      parts.push(`<text x="${r.x + (keyed ? 26 : 14)}" y="${y}" fill="${token.text}" font-size="10.5"${keyed ? ' font-weight="700"' : ''}>${escapeXml(wrapText(attribute.name, rowChars(r.width, keyed, attribute.required), 1)[0] ?? '')}</text>`)
+      if (attribute.required && !keyed) parts.push(`<text x="${r.x + r.width - 10}" y="${y}" text-anchor="end" fill="${token.subtext}" font-size="9">*</text>`)
+      y += CARD_ROW
+    })
+    // Reference rows: a chain icon and the referenced entity, on the key holder's card (decision: reference-source-holds-key).
+    references.forEach((row) => {
+      parts.push(iconSvg('chain', r.x + 10, y + 1, token.subtext))
+      parts.push(`<text x="${r.x + 26}" y="${y}" fill="${token.subtext}" font-size="10.5">${escapeXml(wrapText(referenceRowText(row), rowChars(r.width, true, false), 1)[0] ?? '')}</text>`)
+      y += CARD_ROW
+    })
+    if (hidden > 0 || shown.length === 0) parts.push(`<text x="${r.x + 14}" y="${y}" fill="${token.subtext}" font-size="9.5" font-style="italic">${escapeXml(model.labels.moreFields(hidden))}</text>`)
+  } else if (mode === 'descriptive' && element.description.trim()) {
+    const available = Math.max(1, Math.floor((r.y + r.height - 6 - y) / 12) + 1)
+    wrapText(element.description, Math.floor((r.width - 24) / 6), Math.min(4, available)).forEach((line) => {
+      parts.push(`<text x="${r.x + 12}" y="${y}" fill="${token.subtext}" font-size="10">${escapeXml(line)}</text>`)
+      y += 12
+    })
+  } else if (mode !== 'descriptive') {
+    parts.push(`<text x="${textX}" y="${y}" text-anchor="middle" fill="${token.subtext}" font-size="9.5" font-style="italic">${escapeXml(model.labels.fieldCount(attributes.length))}</text>`)
+  }
+  parts.push('</g>')
+  return parts.join('')
+}
+
+function iconSvg(icon: IconKind | 'key' | 'chain', x: number, y: number, color: string): string {
   const s = 12
   const attrs = `fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"`
-  const glyph: Record<IconKind, string> = {
+  const glyph: Record<IconKind | 'key' | 'chain', string> = {
     person: `<circle cx="6" cy="4" r="2.4"/><path d="M1.5 11.5a4.5 4.5 0 0 1 9 0"/>`,
     external: `<path d="M7 1.5h3.5V5M10.5 1.5 5.5 6.5"/><path d="M9 7v3H1.5V3H5"/>`,
     database: `<ellipse cx="6" cy="3" rx="4.5" ry="1.8"/><path d="M1.5 3v6c0 1 2 1.8 4.5 1.8s4.5-.8 4.5-1.8V3"/>`,
@@ -449,6 +566,9 @@ function iconSvg(icon: IconKind, x: number, y: number, color: string): string {
     system: `<rect x="1.5" y="1.5" width="9" height="9" rx="1.5"/><path d="M4 6h4M6 4v4"/>`,
     container: `<rect x="1.5" y="2.5" width="9" height="7" rx="1.5"/><path d="M1.5 5h9"/>`,
     component: `<rect x="3" y="1.5" width="7.5" height="9" rx="1.2"/><path d="M1.5 4h3M1.5 7h3"/>`,
+    table: `<rect x="1.5" y="2" width="9" height="8" rx="1"/><path d="M1.5 5h9M5 5v5"/>`,
+    key: `<circle cx="4" cy="6" r="2.2"/><path d="M6.2 6h4.3M9 6v2M7.5 6v1.5"/>`,
+    chain: `<path d="M5 7.5a2 2 0 0 0 2.8.2l1.5-1.5a2 2 0 0 0-2.8-2.8l-.6.6"/><path d="M7 4.5a2 2 0 0 0-2.8-.2L2.7 5.8a2 2 0 0 0 2.8 2.8l.6-.6"/>`,
     none: '',
   }
   if (!glyph[icon]) return ''
@@ -486,6 +606,11 @@ function renderFrame(model: RenderModel): string {
   return parts.join('')
 }
 
+/** Marker definitions the legend needs when drawn in its own SVG. */
+export function markerDefs(theme: Theme): string {
+  return `<marker id="c4-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="${theme.edge.stroke}"/></marker><marker id="c4-arrow-hollow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.5 L9.5,5 L0.5,9.5 z" fill="${theme.background}" stroke="${theme.edge.projectedStroke}"/></marker>${erdMarkerDefs(theme)}`
+}
+
 export function renderLegend(model: RenderModel, box: Rect): string {
   const { theme, labels } = model
   const parts: string[] = []
@@ -501,10 +626,13 @@ export function renderLegend(model: RenderModel, box: Rect): string {
       else if (token.shape === 'browser_window' || token.shape === 'desktop_window' || token.shape === 'mobile_device') parts.push(`<path d="${shapePath(token.shape, { x: sx, y: y - 2, width: 22, height: 14 })}" fill="${token.fill}" stroke="${token.stroke}"/><path d="M ${sx} ${y + 3} h 22" stroke="${token.subtext}" stroke-width="1"/>`)
       else if (token.shape === 'bucket' || token.shape === 'folder') parts.push(`<path d="${shapePath(token.shape, { x: sx, y: y - 2, width: 22, height: 14 })}" fill="${token.fill}" stroke="${token.stroke}"/>`)
       else if (token.shape === 'person_figure') parts.push(`<circle cx="${sx + 11}" cy="${y + 1}" r="4" fill="${token.fill}" stroke="${token.stroke}"/><rect x="${sx + 3}" y="${y + 4}" width="16" height="8" rx="3" fill="${token.fill}" stroke="${token.stroke}"/>`)
-      else parts.push(`<rect x="${sx}" y="${y - 2}" width="22" height="14" rx="3" fill="${token.fill}" stroke="${token.stroke}"/>`)
+      else parts.push(`<rect x="${sx}" y="${y - 2}" width="22" height="14" rx="3" fill="${token.fill}" stroke="${token.stroke}"${entry.swatch.dashed ? ' stroke-dasharray="4 3"' : ''}/>`)
     } else if (entry.swatch.kind === 'edge') {
       const stroke = entry.swatch.projected ? theme.edge.projectedStroke : theme.edge.stroke
-      parts.push(`<path d="M ${sx} ${y + 5} L ${sx + 22} ${y + 5}" stroke="${stroke}" stroke-width="1.5"${entry.swatch.boundary ? ' stroke-dasharray="4 3"' : ''} marker-end="url(#${entry.swatch.projected ? 'c4-arrow-hollow' : 'c4-arrow'})"/>`)
+      const erdKind = entry.swatch.erdKind
+      const marker = erdKind ? ERD_MARKERS[erdKind] : entry.swatch.projected ? 'c4-arrow-hollow' : 'c4-arrow'
+      const dashed = entry.swatch.boundary || erdKind === 'label'
+      parts.push(`<path d="M ${sx} ${y + 5} L ${sx + 22} ${y + 5}" stroke="${stroke}" stroke-width="1.5"${dashed ? ' stroke-dasharray="4 3"' : ''}${marker ? ` marker-end="url(#${marker})"` : ''}/>`)
     } else if (entry.swatch.kind === 'boundary') {
       parts.push(`<rect x="${sx}" y="${y - 2}" width="22" height="14" rx="3" fill="${theme.boundary.fill}" stroke="${theme.boundary.stroke}"/>`)
     } else if (entry.swatch.kind === 'outerBoundary') {

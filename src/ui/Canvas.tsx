@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { CANVAS_MARGIN_NODE, expandBoundaryToContain, keepOutside, overlaps } from '../core/layout'
 import type { Position, Rect } from '../core/model'
-import { fitOuterBoundary, renderLegend, renderSvg, type RenderModel } from '../core/render'
+import { fitOuterBoundary, markerDefs, renderLegend, renderSvg, type RenderModel } from '../core/render'
 import type { Copy } from './i18n'
 import { Icon } from './icons'
 
@@ -48,7 +48,7 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
     const width = 230
     const height = 30 + model.legend.length * 20
     const inner = renderLegend(model, { x: 0, y: 0, width, height })
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><marker id="c4-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="${model.theme.edge.stroke}"/></marker><marker id="c4-arrow-hollow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0.5,0.5 L9.5,5 L0.5,9.5 z" fill="${model.theme.background}" stroke="${model.theme.edge.projectedStroke}"/></marker></defs>${inner}</svg>`
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs>${markerDefs(model.theme)}</defs>${inner}</svg>`
   }, [model])
 
   const nodeById = useMemo(() => new Map(model.nodes.map((node) => [node.id, node])), [model])

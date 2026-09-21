@@ -24,7 +24,7 @@ built_in_themes:
     container_data_store_cache: rounded_box with a bolt icon
     container_data_store_other: rounded_box, mid blue, data store icon
     component: rounded_box, light blue, dark text
-    entity: card with light blue header; dependent entity dashed header underline
+    entity: card with light blue header; view and materialized view cards have a dashed outline; dependent entity dashed header underline
     external_context: same shape as its kind, gray fill, external icon
     boundaries: scope solid dark gray line, named at its bottom-left with a kind tag; group dashed gray with a top-left label and optional tint
   classic_c4:

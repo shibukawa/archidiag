@@ -16,7 +16,7 @@ builtin_examples:
     - c4.container_has_technology
     - c4.software_system_has_container_diagram
     - c4.application_container_has_component_diagram
-    - c4.relationship_has_label
+    - c4.relationship_has_label: not applied to dependent entity relationships, whose meaning is ownership
     - c4.relationship_has_technology
     - c4.element_in_group
     - c4.element_in_some_view
@@ -24,10 +24,14 @@ builtin_examples:
   erd:
     - erd.data_store_has_entities
     - erd.entity_has_attributes
-    - erd.entity_has_primary_key
+    - erd.entity_has_visible_attribute: attributes exist but none is important (requirement:erd-field-visibility)
+    - erd.entity_has_primary_key: not applied to views and materialized views
     - erd.entity_has_surrogate_or_natural_key
     - erd.key_suffix_matches_key_kind: _id only on surrogate, _code only on natural
     - erd.entity_has_classification
+    - erd.entity_has_volume: no record_bytes on an entity (requirement:data-volume-estimation)
+    - erd.rebuild_without_initial_rows: rebuild refresh without initial_rows
+    - erd.event_has_timestamp: an event entity has no date or time field; T-style ER expects an event to record when it happened
     - erd.attribute_has_domain: normally always true under decision:field-first-domains; catches explicit unassignment
     - erd.attribute_has_description
     - erd.entity_referenced_by_relationship

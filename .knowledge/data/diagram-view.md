@@ -7,7 +7,7 @@ A diagram view is one named diagram record of a kind and scope; a scope may own 
 
 ```yaml
 fields: id, kind, scope_id, name, description, is_default, element_refs, use_case, dfd_payload, layout, display_mode
-display_mode: compact | descriptive | technology_only (requirement:description-display)
+display_mode: compact | descriptive | technology_only (c4_*) | fields (erd_*) per requirement:description-display
 kind: term:diagram-family
 element_refs:
   c4_and_erd: subset of the scope's child elements plus the external context they need; empty means all
