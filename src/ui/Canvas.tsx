@@ -4,6 +4,7 @@ import type { IntermediateKind, Position, Rect } from '../core/model'
 import { fitOuterBoundary, markerDefs, renderLegend, renderSvg, type RenderModel } from '../core/render'
 import type { Copy } from './i18n'
 import { Icon } from './icons'
+import { usePinchZoom } from './usePinchZoom'
 
 export interface CanvasProps {
   model: RenderModel
@@ -17,6 +18,7 @@ export interface CanvasProps {
   onCommitBoundary: (boundary: Rect) => void
   onConnect: (sourceId: string, targetId: string) => void
   onBackgroundDoubleClick: () => void
+  onZoom: (zoom: number) => void
   /** An element dragged from the explorer was dropped at this canvas position (DFD views add a bound node). */
   onDropElement?: (elementId: string, position: Position) => void
   /** A process-to-process link awaits the choice of file or queue (rule: dfd-connection-policy). */
@@ -44,12 +46,14 @@ function capture(element: Element | null, pointerId: number) {
 }
 interface LinkDrag { pointerId: number; sourceId: string; from: Position; to: Position; hoverId?: string }
 
-export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPreview, onCommitPositions, onCommitBoundary, onConnect, onBackgroundDoubleClick, onDropElement, pendingIntermediate, onChooseIntermediate }: CanvasProps) {
+export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPreview, onCommitPositions, onCommitBoundary, onConnect, onBackgroundDoubleClick, onZoom, onDropElement, pendingIntermediate, onChooseIntermediate }: CanvasProps) {
+  const frameRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const boundaryRef = useRef<BoundaryDrag | null>(null)
   const [linkDrag, setLinkDrag] = useState<LinkDrag | null>(null)
   const [legendOpen, setLegendOpen] = useState(true)
+  usePinchZoom(frameRef, hostRef, zoom, onZoom)
 
   const svg = useMemo(() => renderSvg(model, { frame: 'none', background: true, selectedIds, interactive: true }), [model, selectedIds])
   const legendSvg = useMemo(() => {
@@ -295,7 +299,7 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
   const width = model.size.width
   const height = model.size.height
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-line shadow-glow">
+    <div ref={frameRef} className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-line shadow-glow">
       <div
         ref={hostRef}
         className="absolute inset-0 overflow-auto"

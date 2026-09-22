@@ -19,6 +19,7 @@ import { Icon, type IconName } from './icons'
 import { Inspector } from './Inspector'
 import { QuickCreate, type QuickCreateInput } from './QuickCreate'
 import { useProjectHistory } from './useHistory'
+import { clampZoom } from './usePinchZoom'
 import { ValidationPanel } from './ValidationPanel'
 import { VolumePanel } from './VolumePanel'
 import { registerWebMcpTools } from './webmcp'
@@ -683,9 +684,9 @@ export default function App() {
                 ))}
               </div>
               <div className="join border border-line bg-panel/60">
-                {helperButton('zoomOut', copy.zoomOut, () => setZoom((value) => Math.max(0.4, Math.round((value - 0.1) * 10) / 10)))}
+                {helperButton('zoomOut', copy.zoomOut, () => setZoom((value) => clampZoom(Math.round((value - 0.1) * 10) / 10)))}
                 <span className="join-item grid place-items-center px-2 text-[11px] text-muted">{Math.round(zoom * 100)}%</span>
-                {helperButton('zoomIn', copy.zoomIn, () => setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10)))}
+                {helperButton('zoomIn', copy.zoomIn, () => setZoom((value) => clampZoom(Math.round((value + 0.1) * 10) / 10)))}
               </div>
             </div>
           </div>
@@ -703,6 +704,7 @@ export default function App() {
               onCommitBoundary={(boundary) => commit((current) => commands.setBoundary(current, view.id, boundary))}
               onConnect={connect}
               onBackgroundDoubleClick={() => setQuickCreate(true)}
+              onZoom={setZoom}
               onDropElement={isDfd ? dropElement : undefined}
               pendingIntermediate={pendingIntermediate}
               onChooseIntermediate={chooseIntermediate}
