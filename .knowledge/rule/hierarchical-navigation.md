@@ -11,8 +11,9 @@ navigation:
   context_software_system: open container view with scope_id equal to the system id
   container_container: open component view with scope_id equal to the container id
   container_database_store: open erd_component with scope_id equal to the container id when data_store_kind is database or database_schema (rule:erd-scope-integrity)
+  container_other_store: open the item list (erd_component kind) of a pubsub, queue, bucket, or file_share container showing its topics or folders (data:store-item)
   entity: open erd_code with scope_id equal to the entity id (data:entity)
-  dfd_process: open the next-level DFD of the same use case (rule:dfd-c4-pairing)
+  dfd_bound_node: open the element's own scope (rule:dfd-c4-pairing); there is no DFD-to-DFD drill-down (decision:dfd-container-level-only)
   dfd_diagram_ref: open the referenced DFD (data:dfd-diagram-ref)
   breadcrumb: show project root and ancestor names
   back: restore the previous diagram and selection when possible

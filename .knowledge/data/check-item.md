@@ -20,6 +20,8 @@ builtin_examples:
     - c4.relationship_has_technology
     - c4.element_in_group
     - c4.element_in_some_view
+    - c4.component_in_placeholder_container: a component still lives in the system's "Unknown container" (decision:dfd-drives-c4)
+    - c4.derived_relationship_not_materialized: info; a line exists only because of DFD flows
     - layout.left_to_right_violations: dfd_* views only
   erd:
     - erd.data_store_has_entities
@@ -53,11 +55,14 @@ builtin_examples:
     - vocabulary.plural_missing
   dfd:
     - dfd.software_system_has_dfd
-    - dfd.container_has_dfd
     - dfd.flow_has_payload_or_label
     - dfd.store_flow_has_operations
     - dfd.atomic_boundary_single_store
     - dfd.atomic_boundary_no_queue
+    - dfd.boundary_has_flows
+    - dfd.node_placed_in_model: a free node not yet placed into C4 or an ERD (decision:dfd-first-free-nodes)
+    - dfd.node_has_flow
+    - dfd.response_flow_drawn: info; a flow answers a flow running the other way between the same two nodes, which the request already implies (requirement:dfd-flow-direction)
     - dfd.diagram_ref_resolves
   perspective:
     - perspective.required_on_kind: parameters perspective_id, element_kinds
@@ -67,7 +72,6 @@ builtin_examples:
     - lifecycle.planned_without_description
   classification: rule:classification-propagation items
   cross:
-    - cross.dfd_flow_has_c4_relationship
     - cross.entity_has_creator_and_reader
 constraints:
   - evaluation is deterministic and pure over data:c4-project

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import type { ApplicationKind, ContainerCategory, DataStoreKind, DiagramView, ElementKind, Group, SqlDialect } from '../core/model'
-import { APPLICATION_KINDS, childKindForView, DATA_STORE_KINDS, LEVEL_BY_VIEW_KIND, SQL_STORE_KINDS } from '../core/model'
+import type { ApplicationKind, ContainerCategory, DataStoreKind, DfdRole, DiagramView, Element, ElementKind, Group, IntermediateKind, SqlDialect } from '../core/model'
+import { APPLICATION_KINDS, childKindForView, DATA_STORE_KINDS, INTERMEDIATE_KINDS, isDfdView, LEVEL_BY_VIEW_KIND, SQL_STORE_KINDS } from '../core/model'
 import { RadioRow } from './Inspector'
 import type { Copy } from './i18n'
 import { Icon } from './icons'
@@ -14,6 +14,9 @@ export interface QuickCreateInput {
   dataStoreKind?: DataStoreKind
   sqlDialect?: SqlDialect
   groupId?: string
+  /** DFD views: a free node of this role instead of an element (decision: dfd-first-free-nodes). */
+  dfdRole?: DfdRole
+  intermediateKind?: IntermediateKind
 }
 
 interface Defaults {
@@ -23,14 +26,19 @@ interface Defaults {
   dataStoreKind: DataStoreKind
   sqlDialect: SqlDialect
   groupId: string
+  dfdRole: DfdRole
+  intermediateKind: IntermediateKind
 }
+
+const DFD_QUICK_ROLES: DfdRole[] = ['process', 'data_store', 'external_entity', 'intermediate_data']
 
 const remembered = new Map<string, Defaults>()
 
-export function QuickCreate({ view, groups, copy, onCreate, onClose }: { view: DiagramView; groups: Group[]; copy: Copy; onCreate: (input: QuickCreateInput) => void; onClose: () => void }) {
+export function QuickCreate({ view, scope, groups, copy, onCreate, onClose }: { view: DiagramView; scope?: Element; groups: Group[]; copy: Copy; onCreate: (input: QuickCreateInput) => void; onClose: () => void }) {
   const level = LEVEL_BY_VIEW_KIND[view.kind]
-  const kindOptions: ElementKind[] = level === 'context' ? ['softwareSystem', 'person', 'externalSystem'] : level === 'container' ? ['container'] : [childKindForView(view.kind)]
-  const [defaults, setDefaults] = useState<Defaults>(() => remembered.get(view.kind) ?? { kind: kindOptions[0], containerCategory: 'application', applicationKind: 'server', dataStoreKind: 'database', sqlDialect: 'postgresql', groupId: '' })
+  const kindOptions: ElementKind[] = level === 'context' ? ['softwareSystem', 'person', 'externalSystem'] : level === 'container' ? ['container'] : [childKindForView(view.kind, scope)]
+  const dfd = isDfdView(view.kind)
+  const [defaults, setDefaults] = useState<Defaults>(() => remembered.get(view.kind) ?? { kind: kindOptions[0], containerCategory: 'application', applicationKind: 'server', dataStoreKind: 'database', sqlDialect: 'postgresql', groupId: '', dfdRole: 'process', intermediateKind: 'api_document' })
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [count, setCount] = useState(0)
@@ -43,6 +51,14 @@ export function QuickCreate({ view, groups, copy, onCreate, onClose }: { view: D
   const submit = () => {
     const trimmed = name.trim()
     if (!trimmed) return
+    if (dfd) {
+      onCreate({ name: trimmed, description: description.trim(), kind: defaults.kind, dfdRole: defaults.dfdRole, intermediateKind: defaults.intermediateKind })
+      setName('')
+      setDescription('')
+      setCount((value) => value + 1)
+      nameRef.current?.focus()
+      return
+    }
     onCreate({
       name: trimmed,
       description: description.trim(),
@@ -70,14 +86,21 @@ export function QuickCreate({ view, groups, copy, onCreate, onClose }: { view: D
         <button type="button" className="text-muted hover:text-base-content" onClick={onClose} aria-label={copy.cancel}><Icon name="x" size={14} /></button>
       </div>
       <div className="mb-2 grid grid-cols-2 gap-2">
-        {kindOptions.length > 1 && (
+        {dfd && (
+          <div className="col-span-2 text-[10px] text-muted">{copy.role}
+            <div className="mt-1"><RadioRow name="qc-role" value={defaults.dfdRole} options={DFD_QUICK_ROLES.map((role) => [role, copy.roles[role]])} onChange={(value) => setDefaults({ ...defaults, dfdRole: value as DfdRole })} /></div>
+            {defaults.dfdRole === 'intermediate_data' && <div className="mt-1"><RadioRow name="qc-intermediate" value={defaults.intermediateKind} options={INTERMEDIATE_KINDS.map((kind) => [kind, copy.intermediateKinds[kind]])} onChange={(value) => setDefaults({ ...defaults, intermediateKind: value as IntermediateKind })} /></div>}
+            <p className="mt-1 leading-4">{copy.freeNodeHint}</p>
+          </div>
+        )}
+        {!dfd && kindOptions.length > 1 && (
           <label className="col-span-2 text-[10px] text-muted">{copy.kind}
             <select className={select} value={defaults.kind} onChange={(event) => setDefaults({ ...defaults, kind: event.target.value as ElementKind })}>
               {kindOptions.map((kind) => <option key={kind} value={kind}>{copy.kinds[kind]}</option>)}
             </select>
           </label>
         )}
-        {defaults.kind === 'container' && (
+        {!dfd && defaults.kind === 'container' && (
           <>
             <div className="col-span-2 text-[10px] text-muted">{copy.containerCategory}
               <div className="mt-1"><RadioRow name="qc-category" value={defaults.containerCategory} options={(['application', 'dataStore'] as ContainerCategory[]).map((option) => [option, copy.categories[option]])} onChange={(value) => setDefaults({ ...defaults, containerCategory: value as ContainerCategory })} /></div>
@@ -99,7 +122,7 @@ export function QuickCreate({ view, groups, copy, onCreate, onClose }: { view: D
             )}
           </>
         )}
-        {groups.length > 0 && (
+        {!dfd && groups.length > 0 && (
           <label className="col-span-2 text-[10px] text-muted">{copy.group}
             <select className={select} value={defaults.groupId} onChange={(event) => setDefaults({ ...defaults, groupId: event.target.value })}>
               <option value="">{copy.noGroup}</option>

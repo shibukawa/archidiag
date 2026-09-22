@@ -14,6 +14,7 @@
 {"category": "structure", "id": "data:dfd-diagram-ref", "path": ".knowledge/data/dfd-diagram-ref.md", "role": "supporting", "title": "DFD Diagram Reference", "type": "data"}
 {"category": "structure", "id": "data:dfd-intermediate-data", "path": ".knowledge/data/dfd-intermediate-data.md", "role": "supporting", "title": "DFD Intermediate Data", "type": "data"}
 {"category": "structure", "id": "data:dfd-model", "path": ".knowledge/data/dfd-model.md", "role": "supporting", "title": "DFD Model", "type": "data"}
+{"category": "structure", "id": "data:dfd-process-group", "path": ".knowledge/data/dfd-process-group.md", "role": "supporting", "title": "DFD Process Group", "type": "data"}
 {"category": "structure", "id": "data:dfd-transaction-boundary", "path": ".knowledge/data/dfd-transaction-boundary.md", "role": "supporting", "title": "DFD Transaction Boundary", "type": "data"}
 {"category": "structure", "id": "data:diagram-legend", "path": ".knowledge/data/diagram-legend.md", "role": "supporting", "title": "Diagram Legend", "type": "data"}
 {"category": "structure", "id": "data:diagram-view", "path": ".knowledge/data/diagram-view.md", "role": "supporting", "title": "Diagram View", "type": "data"}
@@ -33,6 +34,7 @@
 {"category": "structure", "id": "data:review-thread", "path": ".knowledge/data/review-thread.md", "role": "supporting", "title": "Review Thread", "type": "data"}
 {"category": "structure", "id": "data:sql-dialect-mapping", "path": ".knowledge/data/sql-dialect-mapping.md", "role": "supporting", "title": "SQL Dialect Mapping", "type": "data"}
 {"category": "structure", "id": "data:starter-project", "path": ".knowledge/data/starter-project.md", "role": "supporting", "title": "Starter Project", "type": "data"}
+{"category": "structure", "id": "data:store-item", "path": ".knowledge/data/store-item.md", "role": "supporting", "title": "Store Item", "type": "data"}
 {"category": "structure", "id": "data:style-theme", "path": ".knowledge/data/style-theme.md", "role": "supporting", "title": "Style Theme", "type": "data"}
 {"category": "structure", "id": "data:vocabulary-binding", "path": ".knowledge/data/vocabulary-binding.md", "role": "supporting", "title": "Vocabulary Binding", "type": "data"}
 {"category": "structure", "id": "data:vocabulary-entry", "path": ".knowledge/data/vocabulary-entry.md", "role": "supporting", "title": "Vocabulary Entry", "type": "data"}
@@ -40,6 +42,12 @@
 {"category": "constraint", "id": "decision:c4-supplementary-diagrams", "path": ".knowledge/decision/c4-supplementary-diagrams.md", "role": "supporting", "title": "C4 Supplementary Diagrams", "type": "decision"}
 {"category": "constraint", "id": "decision:checks-over-maturity", "path": ".knowledge/decision/checks-over-maturity.md", "role": "supporting", "title": "Configurable Checks Instead of Maturity Scores", "type": "decision"}
 {"category": "constraint", "id": "decision:context-level-dfd", "path": ".knowledge/decision/context-level-dfd.md", "role": "supporting", "title": "Context-Level DFD", "type": "decision"}
+{"category": "constraint", "id": "decision:dfd-component-granularity", "path": ".knowledge/decision/dfd-component-granularity.md", "role": "supporting", "title": "DFD Nodes Are Component-Level", "type": "decision"}
+{"category": "constraint", "id": "decision:dfd-container-level-only", "path": ".knowledge/decision/dfd-container-level-only.md", "role": "supporting", "title": "DFDs at Container Level Only", "type": "decision"}
+{"category": "constraint", "id": "decision:dfd-drives-c4", "path": ".knowledge/decision/dfd-drives-c4.md", "role": "supporting", "title": "DFD Flows Grow the C4 Model", "type": "decision"}
+{"category": "constraint", "id": "decision:dfd-first-free-nodes", "path": ".knowledge/decision/dfd-first-free-nodes.md", "role": "supporting", "title": "DFD-First Free Nodes", "type": "decision"}
+{"category": "constraint", "id": "decision:dfd-logical-process-group", "path": ".knowledge/decision/dfd-logical-process-group.md", "role": "supporting", "title": "Logical Process Group for Process Chains", "type": "decision"}
+{"category": "constraint", "id": "decision:dfd-passthrough-components", "path": ".knowledge/decision/dfd-passthrough-components.md", "role": "supporting", "title": "Pass-Through Components Bind to the Document They Handle", "type": "decision"}
 {"category": "constraint", "id": "decision:diagram-kind-extension", "path": ".knowledge/decision/diagram-kind-extension.md", "role": "supporting", "title": "Extend Diagrams by Kind, Not by Separate Projects", "type": "decision"}
 {"category": "constraint", "id": "decision:field-first-domains", "path": ".knowledge/decision/field-first-domains.md", "role": "supporting", "title": "Field-First Domains", "type": "decision"}
 {"category": "constraint", "id": "decision:important-fields-on-canvas", "path": ".knowledge/decision/important-fields-on-canvas.md", "role": "supporting", "title": "Important Fields on Canvas", "type": "decision"}
@@ -71,6 +79,7 @@
 {"category": "objective", "id": "requirement:boundary-resizing", "path": ".knowledge/requirement/boundary-resizing.md", "role": "primary", "title": "Resize System Boundaries", "type": "requirement"}
 {"category": "objective", "id": "requirement:browser-editing", "path": ".knowledge/requirement/browser-editing.md", "role": "primary", "title": "Browser Editing Without a Backend", "type": "requirement"}
 {"category": "objective", "id": "requirement:bun-backend", "path": ".knowledge/requirement/bun-backend.md", "role": "primary", "title": "Optional Bun Backend", "type": "requirement"}
+{"category": "objective", "id": "requirement:c4-links-into-dfd", "path": ".knowledge/requirement/c4-links-into-dfd.md", "role": "primary", "title": "Bring 1:1 Component Links from C4 into a DFD", "type": "requirement"}
 {"category": "objective", "id": "requirement:canvas-quick-create", "path": ".knowledge/requirement/canvas-quick-create.md", "role": "primary", "title": "Canvas Quick Create", "type": "requirement"}
 {"category": "objective", "id": "requirement:configurable-model-checks", "path": ".knowledge/requirement/configurable-model-checks.md", "role": "primary", "title": "Configurable Cross-Diagram Checks", "type": "requirement"}
 {"category": "objective", "id": "requirement:container-types", "path": ".knowledge/requirement/container-types.md", "role": "primary", "title": "Classify Application and Data Store Containers", "type": "requirement"}
@@ -81,11 +90,13 @@
 {"category": "objective", "id": "requirement:deep-links", "path": ".knowledge/requirement/deep-links.md", "role": "primary", "title": "Deep Links and Embedding", "type": "requirement"}
 {"category": "objective", "id": "requirement:deployment-diagram", "path": ".knowledge/requirement/deployment-diagram.md", "role": "primary", "title": "Deployment Diagram", "type": "requirement"}
 {"category": "objective", "id": "requirement:description-display", "path": ".knowledge/requirement/description-display.md", "role": "primary", "title": "Descriptions on Every Diagram Item", "type": "requirement"}
+{"category": "objective", "id": "requirement:dfd-flow-direction", "path": ".knowledge/requirement/dfd-flow-direction.md", "role": "primary", "title": "DFD Reads Left to Right from a Start Marker", "type": "requirement"}
 {"category": "objective", "id": "requirement:diagram-export-formats", "path": ".knowledge/requirement/diagram-export-formats.md", "role": "primary", "title": "Export Diagrams to Common Formats", "type": "requirement"}
 {"category": "objective", "id": "requirement:document-bundle-export", "path": ".knowledge/requirement/document-bundle-export.md", "role": "primary", "title": "Project Document Bundle Export", "type": "requirement"}
 {"category": "objective", "id": "requirement:domain-consolidation", "path": ".knowledge/requirement/domain-consolidation.md", "role": "primary", "title": "Field Name as Domain, Consolidated Later", "type": "requirement"}
 {"category": "objective", "id": "requirement:domain-dictionary", "path": ".knowledge/requirement/domain-dictionary.md", "role": "primary", "title": "Project Domain Dictionary", "type": "requirement"}
 {"category": "objective", "id": "requirement:drag-layout-editing", "path": ".knowledge/requirement/drag-layout-editing.md", "role": "primary", "title": "Drag Diagram Elements", "type": "requirement"}
+{"category": "objective", "id": "requirement:edge-hover-highlight", "path": ".knowledge/requirement/edge-hover-highlight.md", "role": "primary", "title": "Hover Highlight of Connections", "type": "requirement"}
 {"category": "objective", "id": "requirement:element-analysis-view", "path": ".knowledge/requirement/element-analysis-view.md", "role": "primary", "title": "Cross-Diagram Element Analysis", "type": "requirement"}
 {"category": "objective", "id": "requirement:element-groups", "path": ".knowledge/requirement/element-groups.md", "role": "primary", "title": "Group Elements Inside a Scope", "type": "requirement"}
 {"category": "objective", "id": "requirement:element-lifecycle-status", "path": ".knowledge/requirement/element-lifecycle-status.md", "role": "primary", "title": "Existing, Planned, and Deprecated Status", "type": "requirement"}

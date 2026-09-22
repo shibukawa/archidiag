@@ -17,9 +17,7 @@ title_block:
     c4_component: Component View
     erd_component: Component ERD
     erd_code: Code ERD
-    dfd_context: System Context DFD
     dfd_container: Container DFD
-    dfd_component: Component DFD
 legend:
   position: bottom_right
   content: data:diagram-legend derived from the view; only notations present in the view appear

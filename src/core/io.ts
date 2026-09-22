@@ -1,4 +1,4 @@
-import { emptyProject, ENTITY_CLASSIFICATIONS, LEGACY_CLASSIFICATIONS, makeId, SCHEMA_VERSION, type C4Level, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
+import { emptyDfdPayload, emptyProject, ENTITY_CLASSIFICATIONS, isDfdView, LEGACY_CLASSIFICATIONS, makeId, SCHEMA_VERSION, type C4Level, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
 import { makeView } from './views'
 
 interface LegacyElement extends Element { position?: Position }
@@ -41,15 +41,29 @@ export function migrateProject(raw: unknown): Project {
 function normalize(project: Project): Project {
   const base = emptyProject(project.name)
   // v2 -> v3 is additive: entities, attributes, erd_component views, and the erd relationship record.
+  // v3 -> v4 is additive: dfd_* views with their use case and payload (data:dfd-model).
   return {
     ...base,
     ...project,
     schemaVersion: SCHEMA_VERSION,
     groups: project.groups ?? {},
-    views: Object.fromEntries(Object.entries(project.views ?? {}).map(([id, view]) => [id, { ...makeView(view.kind, view.scopeId, view.name, view.isDefault), ...view, id, layout: { positions: view.layout?.positions ?? {}, boundary: view.layout?.boundary } }])),
+    views: Object.fromEntries(Object.entries(project.views ?? {}).filter(([, view]) => KNOWN_KINDS.has(view.kind)).map(([id, view]) => [id, normalizeView({ ...makeView(view.kind, view.scopeId, view.name, view.isDefault), ...view, id, layout: { positions: view.layout?.positions ?? {}, boundary: view.layout?.boundary } })])),
     settings: { ...base.settings, ...project.settings },
     elements: Object.fromEntries(Object.entries(project.elements).map(([id, element]) => [id, normalizeElement(stripLegacy(element as LegacyElement))])),
   }
+}
+
+/** Views of a kind this build does not know (pre-release dfd_context and dfd_component) are dropped on import. */
+const KNOWN_KINDS = new Set<string>(['c4_context', 'c4_container', 'c4_component', 'erd_component', 'erd_code', 'dfd_container'])
+
+function normalizeView(view: DiagramView): DiagramView {
+  if (!isDfdView(view.kind)) return view
+  const dfd = view.dfd ?? emptyDfdPayload()
+  const nodes = Object.fromEntries(Object.entries(dfd.nodes ?? {}).map(([id, node]) => [id, { ...node, id, name: node.name ?? '', description: node.description ?? '', technology: node.technology ?? '' }]))
+  const flows = Object.fromEntries(Object.entries(dfd.flows ?? {}).map(([id, flow]) => [id, { ...flow, id, label: flow.label ?? '', description: flow.description ?? '', technology: flow.technology ?? '', dataRefs: flow.dataRefs ?? [], operations: flow.operations ?? [] }]))
+  const boundaries = Object.fromEntries(Object.entries(dfd.boundaries ?? {}).map(([id, boundary]) => [id, { ...boundary, id, description: boundary.description ?? '', consistency: boundary.consistency ?? 'atomic', flowIds: (boundary.flowIds ?? []).filter((flowId) => flows[flowId]) }]))
+  const groups = Object.fromEntries(Object.entries(dfd.groups ?? {}).map(([id, group]) => [id, { ...group, id, name: group.name ?? '', description: group.description ?? '', processNumber: group.processNumber ?? '', memberIds: (group.memberIds ?? []).filter((memberId) => nodes[memberId] || (dfd.groups ?? {})[memberId]) }]))
+  return { ...view, useCase: view.useCase ?? '', dfd: { ...dfd, nodes, flows, boundaries, groups, nextNumber: dfd.nextNumber ?? Object.keys(nodes).length + 1 }, layout: { ...view.layout, collapsedGroupIds: (view.layout.collapsedGroupIds ?? []).filter((id) => groups[id]) } }
 }
 
 function normalizeElement(element: Element): Element {
@@ -88,7 +102,7 @@ function migrateV1(data: LegacyProject): Project {
     project.views[view.id] = view
     return view
   }
-  const levelOf: Record<ViewKind, C4Level> = { c4_context: 'context', c4_container: 'container', c4_component: 'component', erd_component: 'component', erd_code: 'component' }
+  const levelOf: Record<ViewKind, C4Level> = { c4_context: 'context', c4_container: 'container', c4_component: 'component', erd_component: 'component', erd_code: 'component', dfd_container: 'container' }
   const scopesToBuild: Array<{ kind: ViewKind; scopeId: string | null }> = [{ kind: 'c4_context', scopeId: null }]
   Object.values(project.elements).forEach((element) => {
     if (element.kind === 'softwareSystem') scopesToBuild.push({ kind: 'c4_container', scopeId: element.id })

@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { childViewKind, effectiveCategory, type DiagramView, type Element, type Group, type Project } from '../core/model'
-import type { Copy } from './i18n'
+import { dfdOf, dfdViews } from '../core/dfd'
+import { childViewKind, effectiveCategory, isDfdView, type DiagramView, type Element, type Group, type Project } from '../core/model'
+import { ELEMENT_DRAG_TYPE } from './Canvas'
+import { dfdLabel, type Copy } from './i18n'
 import { Icon, type IconName } from './icons'
 
 export interface ExplorerProps {
@@ -12,6 +14,7 @@ export interface ExplorerProps {
   onOpenScope: (kind: DiagramView['kind'], scopeId: string | null) => void
   onSelectElement: (id: string) => void
   onQuickCreate: () => void
+  onOpenView: (viewId: string) => void
   notice: string
 }
 
@@ -21,10 +24,12 @@ const iconFor = (element: Element): IconName => {
   if (element.kind === 'externalSystem') return 'external'
   if (element.kind === 'component') return 'layers'
   if (element.kind === 'entity') return 'table'
+  if (element.kind === 'topic') return 'topic'
+  if (element.kind === 'folder') return 'folder'
   return effectiveCategory(element) === 'dataStore' ? 'database' : 'box'
 }
 
-export function Explorer({ project, view, copy, search, onSearch, onOpenScope, onSelectElement, onQuickCreate, notice }: ExplorerProps) {
+export function Explorer({ project, view, copy, search, onSearch, onOpenScope, onSelectElement, onQuickCreate, onOpenView, notice }: ExplorerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const toggle = (id: string) => setCollapsed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const matches = (element: Element) => !search || `${element.name} ${element.description} ${element.technology}`.toLowerCase().includes(search.toLowerCase())
@@ -43,7 +48,7 @@ export function Explorer({ project, view, copy, search, onSearch, onOpenScope, o
           <button type="button" className="grid h-4 w-4 place-items-center" onClick={() => toggle(element.id)} aria-label="toggle">
             {children.length > 0 ? <Icon name={showChildren ? 'chevronDown' : 'chevron'} size={11} /> : <span className="h-1 w-1 rounded-full bg-line" />}
           </button>
-          <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" onClick={() => onSelectElement(element.id)} onDoubleClick={() => kind && onOpenScope(kind, element.id)} title={element.description}>
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 text-left" draggable={isDfdView(view.kind)} onDragStart={(event) => { event.dataTransfer.setData(ELEMENT_DRAG_TYPE, element.id); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => onSelectElement(element.id)} onDoubleClick={() => kind && onOpenScope(kind, element.id)} title={element.description}>
             <Icon name={iconFor(element)} size={13} className="shrink-0" />
             <span className="truncate">{element.name}</span>
           </button>
@@ -88,6 +93,9 @@ export function Explorer({ project, view, copy, search, onSearch, onOpenScope, o
   }
 
   const roots = elements.filter((element) => !element.parentId && matches(element))
+  // DFDs grouped by scope, each labelled by use case (ui: diagram-editor dfds_by_scope_and_use_case).
+  const dfds = dfdViews(project).filter((candidate) => !search || dfdLabel(copy, candidate).toLowerCase().includes(search.toLowerCase()))
+  const dfdScopes = [...new Set(dfds.map((candidate) => candidate.scopeId))]
   return (
     <aside className="flex min-h-0 flex-col border-r border-line/80 bg-panel/45">
       <div className="border-b border-line/80 p-3">
@@ -105,6 +113,22 @@ export function Explorer({ project, view, copy, search, onSearch, onOpenScope, o
           <Icon name="folder" size={14} className="text-cyan" />{project.name}
         </button>
         {renderScope(null, roots, 0)}
+        {dfds.length > 0 && (
+          <div className="mt-3">
+            <div className="section-label mb-1 px-2">{copy.dfds}</div>
+            {dfdScopes.map((scopeId) => (
+              <div key={scopeId ?? 'root'} className="mb-1">
+                <div className="truncate px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted">{scopeId ? project.elements[scopeId]?.name ?? '?' : copy.projectRoot}</div>
+                {dfds.filter((candidate) => candidate.scopeId === scopeId).map((candidate) => (
+                  <button key={candidate.id} type="button" onClick={() => onOpenView(candidate.id)} className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-xs ${candidate.id === view.id ? 'bg-cyan/10 text-cyan' : 'text-muted hover:bg-white/5 hover:text-base-content'}`} title={`${copy.viewKinds[candidate.kind]} · ${Object.keys(dfdOf(candidate).nodes).length} / ${Object.keys(dfdOf(candidate).flows).length}`}>
+                    <Icon name="flow" size={13} className="shrink-0" />
+                    <span className="truncate">{dfdLabel(copy, candidate)}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="border-t border-line/80 p-3">
         <div className="flex items-center gap-2 rounded-lg bg-ink/40 px-3 py-2 text-[11px] text-muted"><span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" /><span className="truncate">{notice}</span></div>

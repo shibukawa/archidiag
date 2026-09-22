@@ -12,7 +12,7 @@ built_in:
     systems: Commerce Platform, Payment Provider (external), Customer (person)
     containers: Web Application, Order Service, Order Worker, Orders DB (postgresql), Product Catalog DB (sqlite), Order Events (pubsub)
     erd: Orders DB with User -> Affiliation, Belonging; Order -> OrderLine as dependent tables; natural key user_code
-    dfds: Place order at dfd_context, dfd_container, dfd_component with a queue and an atomic transaction boundary
+    dfds: Place order as the Commerce Platform's dfd_container at component granularity (decision:dfd-component-granularity): Checkout Page, the checkout request document handled by Order Controller, Checkout Service writing the Order and Payment tables directly (Order Repository implied, Order Line a dependent detail of Order carried as a payload; decision:dfd-passthrough-components, decision:dfd-component-granularity), the order-placed topic of Order Events, and the worker's job form one logical process group; no response flows are drawn (requirement:dfd-flow-direction); an atomic and an eventual transaction boundary
     dictionaries: Japanese business names with English system and physical names; curated domains UserId, UserCode, Money, CreatedAt plus a few uncurated automatic domains left to demonstrate consolidation
     groups: Order Domain, Catalog Domain
     perspectives: Security notes on external-facing containers

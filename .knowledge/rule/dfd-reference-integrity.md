@@ -7,8 +7,8 @@ DFD nodes, payloads, and diagram references must resolve to canonical records so
 
 ```yaml
 nodes:
-  - element_ref resolves to a person, software system, container, component, or entity
-  - role matches the element kind and position per rule:dfd-c4-pairing
+  - a bound node's element_ref resolves to a person, software system, container, component, or entity; a free node has a name instead (decision:dfd-first-free-nodes)
+  - a bound node's role matches the element kind and position per rule:dfd-c4-pairing
   - intermediate_data nodes have a kind; queue may reference a pubsub container
   - diagram_ref nodes resolve per data:dfd-diagram-ref
 flows:
@@ -22,6 +22,6 @@ propagation:
   - rename of any referenced element or vocabulary entry updates labels
   - deleting a referenced element lists affected DFDs and removes their nodes and flows only after confirmation
 level:
-  - kind and scope_id agree: dfd_context has root, dfd_container a software system, dfd_component an application container; a process element belongs to the scope
+  - kind and scope_id agree: dfd_container has a software system as scope (decision:dfd-container-level-only); a bound process element is an application container of that system
   - a child DFD's scope element is a process node of the parent DFD
 ```

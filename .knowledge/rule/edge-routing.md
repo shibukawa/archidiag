@@ -12,11 +12,12 @@ dfd_*:
     forbidden: top, bottom
     multiple: several connectors on one side spread evenly along it
   direction:
-    default: sources on the left, sinks on the right; a flow leaves the right side of its source and enters the left side of its target
-    back_edge: a target left of its source routes out of the source's right side, around above or below, into the target's left side
+    default: the start marker on the far left, then nodes in flow order; a flow leaves the right side of its source and enters the left side of its target
+    return_lane: a flow whose target is left of its source routes as a reverse S: out of the source's right side, across through the vertical gap between the two boxes, into the target's left side; only boxes on the same row force the crossing below both; drawn lighter (requirement:dfd-flow-direction)
     vertical_neighbors: nodes stacked vertically still connect through side ports with orthogonal bends
-  layout: requirement:auto-layout lays DFDs out left-to-right; external sources left, sinks right, stores right of or below their processes
-  check: layout.left_to_right_violations reports DFD views where most flows run right-to-left, as info
+  layout: requirement:auto-layout lays DFDs out as a topological sort from the start marker; a source is never right of its target unless a loop exists; read tables sit just left of their readers
+  check: layout.left_to_right_violations counts forward flows that point left, as info; zero after Arrange
+  hover: requirement:edge-hover-highlight recolors a hovered line and outlines its endpoints
 c4_and_erd:
   ports: nearest side of each node (left, right, top, or bottom), chosen by the relative position of the two nodes
   direction: none; authors place nodes freely and layout helpers respect that

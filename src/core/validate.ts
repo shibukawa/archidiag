@@ -1,11 +1,12 @@
-import { childViewKind, effectiveCategory, isErdRelationship, isErdStore, isErdView, isViewStorage, LEVEL_BY_VIEW_KIND, scopeViewKindFor, SQL_STORE_KINDS, storeOf, type Element, type ElementKind, type Project, type ViewKind } from './model'
+import { allRelationships, connectionVerdict, derivedRelationships, dfdKindOfScope, dfdOf, groupUnits, nodeName, roleForElement, startNodeOf, touchesStore } from './dfd'
+import { childViewKind, effectiveCategory, isDfdView, isErdRelationship, isErdStore, isErdView, isViewStorage, itemKindFor, LEVEL_BY_VIEW_KIND, scopeViewKindFor, SQL_STORE_KINDS, storeOf, type Element, type ElementKind, type Project, type ViewKind } from './model'
 
 export type Level = 'error' | 'warning' | 'info' | 'off'
 
 export interface Finding {
   itemId: string
   level: Exclude<Level, 'off'>
-  targetKind: 'element' | 'relationship' | 'view' | 'group' | 'project'
+  targetKind: 'element' | 'relationship' | 'view' | 'group' | 'project' | 'node' | 'flow' | 'boundary'
   targetId: string
   message: string
   /** View to open when navigating to the finding, when known. */
@@ -14,7 +15,7 @@ export interface Finding {
 
 export interface CheckItem {
   id: string
-  family: 'c4' | 'erd' | 'layout' | 'integrity'
+  family: 'c4' | 'erd' | 'dfd' | 'cross' | 'layout' | 'integrity'
   title: string
   defaultLevel: Level
 }
@@ -46,6 +47,19 @@ export const CHECK_ITEMS: CheckItem[] = [
   { id: 'erd.event_has_timestamp', family: 'erd', title: 'Event entity records when it happened', defaultLevel: 'info' },
   { id: 'erd.entity_has_volume', family: 'erd', title: 'Entity states its bytes per row', defaultLevel: 'info' },
   { id: 'erd.rebuild_without_initial_rows', family: 'erd', title: 'Rebuilt table states its row count', defaultLevel: 'info' },
+  { id: 'dfd.flow_has_payload_or_label', family: 'dfd', title: 'Flow has a label or names its data', defaultLevel: 'warning' },
+  { id: 'dfd.store_flow_has_operations', family: 'dfd', title: 'Flow touching a data store states its operations', defaultLevel: 'info' },
+  { id: 'dfd.atomic_boundary_single_store', family: 'dfd', title: 'Atomic boundary stays within one data store', defaultLevel: 'warning' },
+  { id: 'dfd.atomic_boundary_no_queue', family: 'dfd', title: 'Atomic boundary does not cross a queue', defaultLevel: 'warning' },
+  { id: 'dfd.boundary_has_flows', family: 'dfd', title: 'Transaction boundary contains at least one flow', defaultLevel: 'warning' },
+  { id: 'dfd.node_placed_in_model', family: 'dfd', title: 'DFD node is placed in C4 or an ERD', defaultLevel: 'info' },
+  { id: 'dfd.node_has_flow', family: 'dfd', title: 'DFD node takes part in a flow', defaultLevel: 'info' },
+  { id: 'dfd.diagram_ref_resolves', family: 'dfd', title: 'Off-page reference points at a DFD', defaultLevel: 'warning' },
+  { id: 'dfd.has_start', family: 'dfd', title: 'DFD starts at a start marker that feeds a process', defaultLevel: 'info' },
+  { id: 'dfd.response_flow_drawn', family: 'dfd', title: 'Flow answers a request that already implies it', defaultLevel: 'info' },
+  { id: 'c4.component_in_placeholder_container', family: 'c4', title: 'Component still lives in the Unknown container', defaultLevel: 'warning' },
+  { id: 'c4.derived_relationship_not_materialized', family: 'c4', title: 'Line exists only because of DFD flows', defaultLevel: 'info' },
+  { id: 'layout.left_to_right_violations', family: 'layout', title: 'DFD forward flows point left', defaultLevel: 'info' },
 ]
 
 /** Field names that read as a point in time, in English or Japanese. */
@@ -53,9 +67,9 @@ const TIMESTAMP_NAME = /(_at|_on|date|time|timestamp|日時|日付|時刻)$/i
 
 export const CHECK_PROFILES: CheckProfile[] = [
   { id: 'context_sketch', name: 'Context sketch', itemLevels: Object.fromEntries(CHECK_ITEMS.map((item) => [item.id, 'off' as Level])) },
-  { id: 'container_sketch', name: 'Container sketch', extends: 'context_sketch', itemLevels: { 'c4.container_has_technology': 'warning', 'c4.relationship_has_label': 'warning', 'c4.relationship_assigned_in_child_view': 'warning', 'c4.data_store_has_dialect': 'info' } },
-  { id: 'component_complete', name: 'Component complete', extends: 'container_sketch', itemLevels: { 'c4.element_has_description': 'warning', 'c4.application_container_has_component_view': 'warning', 'c4.software_system_has_container_view': 'warning', 'c4.component_has_technology': 'info', 'c4.relationship_has_technology': 'info', 'c4.element_in_some_view': 'info', 'c4.element_has_relationship': 'info', 'erd.data_store_has_entities': 'info', 'erd.entity_has_attributes': 'warning', 'erd.entity_has_primary_key': 'warning', 'erd.entity_has_visible_attribute': 'info', 'erd.entity_has_classification': 'info', 'erd.event_has_timestamp': 'warning' } },
-  { id: 'export_ready', name: 'Export ready', extends: 'component_complete', itemLevels: { 'c4.element_has_description': 'error', 'c4.container_has_technology': 'error', 'c4.relationship_has_label': 'error', 'c4.relationship_assigned_in_child_view': 'error', 'c4.application_container_has_component_view': 'warning', 'c4.software_system_has_container_view': 'warning', 'c4.data_store_has_dialect': 'warning', 'erd.entity_has_attributes': 'error', 'erd.entity_has_primary_key': 'error', 'erd.entity_has_visible_attribute': 'warning', 'erd.entity_has_classification': 'warning', 'erd.event_has_timestamp': 'warning' } },
+  { id: 'container_sketch', name: 'Container sketch', extends: 'context_sketch', itemLevels: { 'c4.container_has_technology': 'warning', 'c4.relationship_has_label': 'warning', 'c4.relationship_assigned_in_child_view': 'warning', 'c4.data_store_has_dialect': 'info', 'dfd.flow_has_payload_or_label': 'warning', 'dfd.atomic_boundary_single_store': 'warning', 'dfd.atomic_boundary_no_queue': 'warning', 'dfd.boundary_has_flows': 'warning', 'dfd.diagram_ref_resolves': 'warning', 'dfd.node_placed_in_model': 'info', 'c4.component_in_placeholder_container': 'warning', 'dfd.has_start': 'info', 'layout.left_to_right_violations': 'info', 'dfd.response_flow_drawn': 'info' } },
+  { id: 'component_complete', name: 'Component complete', extends: 'container_sketch', itemLevels: { 'c4.element_has_description': 'warning', 'c4.application_container_has_component_view': 'warning', 'c4.software_system_has_container_view': 'warning', 'c4.component_has_technology': 'info', 'c4.relationship_has_technology': 'info', 'c4.element_in_some_view': 'info', 'c4.element_has_relationship': 'info', 'erd.data_store_has_entities': 'info', 'erd.entity_has_attributes': 'warning', 'erd.entity_has_primary_key': 'warning', 'erd.entity_has_visible_attribute': 'info', 'erd.entity_has_classification': 'info', 'erd.event_has_timestamp': 'warning', 'dfd.store_flow_has_operations': 'info', 'dfd.node_has_flow': 'info', 'c4.derived_relationship_not_materialized': 'info' } },
+  { id: 'export_ready', name: 'Export ready', extends: 'component_complete', itemLevels: { 'c4.element_has_description': 'error', 'c4.container_has_technology': 'error', 'c4.relationship_has_label': 'error', 'c4.relationship_assigned_in_child_view': 'error', 'c4.application_container_has_component_view': 'warning', 'c4.software_system_has_container_view': 'warning', 'c4.data_store_has_dialect': 'warning', 'erd.entity_has_attributes': 'error', 'erd.entity_has_primary_key': 'error', 'erd.entity_has_visible_attribute': 'warning', 'erd.entity_has_classification': 'warning', 'erd.event_has_timestamp': 'warning', 'dfd.flow_has_payload_or_label': 'error', 'dfd.node_placed_in_model': 'warning', 'dfd.diagram_ref_resolves': 'error', 'c4.component_in_placeholder_container': 'error' } },
 ]
 
 export function resolveLevel(profileId: string, itemId: string): Level {
@@ -78,6 +92,8 @@ const VALID_PARENT: Record<ElementKind, ElementKind[] | null> = {
   container: ['softwareSystem'],
   component: ['container'],
   entity: ['container', 'entity'],
+  topic: ['container'],
+  folder: ['container'],
 }
 
 /** Fixed integrity rules; these are always errors and cannot be turned off. */
@@ -93,6 +109,7 @@ export function integrityFindings(project: Project): Finding[] {
       if (!parent || !allowed.includes(parent.kind)) findings.push({ itemId: 'integrity.parent', level: 'error', targetKind: 'element', targetId: element.id, message: `${element.kind} needs a ${allowed.join(' or ')} parent` })
       else if (element.kind === 'component' && parent.kind === 'container' && effectiveCategory(parent) !== 'application') findings.push({ itemId: 'integrity.parent', level: 'error', targetKind: 'element', targetId: element.id, message: 'Components belong to application containers only' })
       else if (element.kind === 'entity' && !storeOf(project, element)) findings.push({ itemId: 'integrity.parent', level: 'error', targetKind: 'element', targetId: element.id, message: 'Entities belong to database or database schema containers, directly or under an owner entity' })
+      else if ((element.kind === 'topic' || element.kind === 'folder') && itemKindFor(parent) !== element.kind) findings.push({ itemId: 'integrity.parent', level: 'error', targetKind: 'element', targetId: element.id, message: element.kind === 'topic' ? 'Topics belong to pub/sub or queue containers' : 'Folders belong to bucket or file share containers' })
       else if (element.kind === 'entity' && parent.kind === 'entity') {
         // rule: erd-scope-integrity. A dependent entity is named by exactly one dependent relationship from its owner.
         const owners = Object.values(project.relationships).filter((relationship) => relationship.erd?.kind === 'dependent' && relationship.targetId === element.id)
@@ -142,8 +159,52 @@ export function integrityFindings(project: Project): Finding[] {
   const defaults = new Map<string, number>()
   Object.values(project.views).forEach((view) => {
     const scope = view.scopeId ? project.elements[view.scopeId] : undefined
-    const expectedKind: ViewKind | undefined = view.scopeId ? (scope ? childViewKind(scope) : undefined) : 'c4_context'
+    // A DFD pairs with the C4 level of its scope (rule: dfd-c4-pairing); every other kind follows childViewKind.
+    const expectedKind: ViewKind | undefined = isDfdView(view.kind) ? dfdKindOfScope(project, view.scopeId) : view.scopeId ? (scope ? childViewKind(scope) : undefined) : 'c4_context'
     if (expectedKind !== view.kind) findings.push({ itemId: 'integrity.view_scope', level: 'error', targetKind: 'view', targetId: view.id, message: `View kind ${view.kind} does not match its scope`, viewId: view.id })
+    if (isDfdView(view.kind)) {
+      // rule: dfd-reference-integrity. Nodes resolve, roles match the element, flows join nodes of this DFD legally, boundaries hold this DFD's flows.
+      const payload = dfdOf(view)
+      Object.values(payload.nodes).forEach((node) => {
+        if (node.elementId) {
+          const element = project.elements[node.elementId]
+          if (!element) findings.push({ itemId: 'integrity.dfd_node_element', level: 'error', targetKind: 'node', targetId: node.id, message: `${view.useCase || view.name}: node references a missing element`, viewId: view.id })
+          else if (roleForElement(project, view, element)?.role !== node.role) findings.push({ itemId: 'integrity.dfd_node_role', level: 'error', targetKind: 'node', targetId: node.id, message: `${element.name}: role ${node.role} does not match its position in this DFD`, viewId: view.id })
+        } else if (node.role !== 'diagram_ref' && node.role !== 'start' && !node.name.trim()) findings.push({ itemId: 'integrity.dfd_node_name', level: 'error', targetKind: 'node', targetId: node.id, message: `${view.useCase || view.name}: a free node has no name`, viewId: view.id })
+        if (node.role === 'diagram_ref' && node.targetViewId && !project.views[node.targetViewId]) findings.push({ itemId: 'integrity.dfd_ref_target', level: 'error', targetKind: 'node', targetId: node.id, message: `${view.useCase || view.name}: reference points at a missing DFD`, viewId: view.id })
+      })
+      if (Object.values(payload.nodes).filter((node) => node.role === 'start').length > 1) findings.push({ itemId: 'integrity.dfd_start', level: 'error', targetKind: 'view', targetId: view.id, message: `${view.useCase || view.name}: more than one start marker`, viewId: view.id })
+      Object.values(payload.flows).forEach((flow) => {
+        const source = payload.nodes[flow.sourceNodeId]
+        const target = payload.nodes[flow.targetNodeId]
+        if (!source || !target) { findings.push({ itemId: 'integrity.dfd_flow_endpoint', level: 'error', targetKind: 'flow', targetId: flow.id, message: `${view.useCase || view.name}: flow endpoint does not resolve`, viewId: view.id }); return }
+        if (connectionVerdict(source, target).kind !== 'allowed') findings.push({ itemId: 'integrity.dfd_flow_pair', level: 'error', targetKind: 'flow', targetId: flow.id, message: `${nodeName(project, source)} → ${nodeName(project, target)}: flows join a process with data or an external entity, never two of a kind`, viewId: view.id })
+        if (flow.operations.length && !touchesStore(payload, flow)) findings.push({ itemId: 'integrity.dfd_flow_operations', level: 'error', targetKind: 'flow', targetId: flow.id, message: `${nodeName(project, source)} → ${nodeName(project, target)}: operations belong on flows that touch a data store`, viewId: view.id })
+      })
+      Object.values(payload.boundaries).forEach((boundary) => {
+        if (boundary.flowIds.some((flowId) => !payload.flows[flowId])) findings.push({ itemId: 'integrity.dfd_boundary_member', level: 'error', targetKind: 'boundary', targetId: boundary.id, message: `${boundary.name}: boundary lists a flow that is not in this DFD`, viewId: view.id })
+      })
+      // Logical process groups: members resolve, belong to one group, and never nest in a cycle (data:dfd-process-group).
+      const membership = new Map<string, number>()
+      Object.values(payload.groups).forEach((group) => {
+        group.memberIds.forEach((id) => {
+          membership.set(id, (membership.get(id) ?? 0) + 1)
+          const node = payload.nodes[id]
+          if (!node && !payload.groups[id]) findings.push({ itemId: 'integrity.dfd_group_member', level: 'error', targetKind: 'node', targetId: group.id, message: `${group.name || group.processNumber}: group lists a member that is not in this DFD`, viewId: view.id })
+          else if (node && node.role !== 'process' && node.role !== 'intermediate_data') findings.push({ itemId: 'integrity.dfd_group_member', level: 'error', targetKind: 'node', targetId: group.id, message: `${group.name || group.processNumber}: only processes and intermediate data join a logical process`, viewId: view.id })
+        })
+        if (groupUnits(payload, group).length < 2) findings.push({ itemId: 'integrity.dfd_group_units', level: 'error', targetKind: 'node', targetId: group.id, message: `${group.name || group.processNumber}: a logical process needs two or more processes or groups`, viewId: view.id })
+        let current: string | undefined = group.id
+        const seen = new Set<string>()
+        while (current) {
+          if (seen.has(current)) { findings.push({ itemId: 'integrity.dfd_group_cycle', level: 'error', targetKind: 'node', targetId: group.id, message: `${group.name || group.processNumber}: group nesting forms a cycle`, viewId: view.id }); break }
+          seen.add(current)
+          const parentId: string | undefined = Object.values(payload.groups).find((other) => other.memberIds.includes(current!))?.id
+          current = parentId
+        }
+      })
+      membership.forEach((count, id) => { if (count > 1) findings.push({ itemId: 'integrity.dfd_group_member', level: 'error', targetKind: 'node', targetId: id, message: `${view.useCase || view.name}: a member belongs to more than one logical process`, viewId: view.id }) })
+    }
     view.elementRefs.forEach((id) => {
       const element = project.elements[id]
       if (!element || (element.parentId ?? null) !== (view.scopeId ?? null)) findings.push({ itemId: 'integrity.view_ref', level: 'error', targetKind: 'view', targetId: view.id, message: `View references ${id} outside its scope`, viewId: view.id })
@@ -194,7 +255,7 @@ export function checkFindings(project: Project, profileId = project.settings.che
     }
     const scopeViews = views.filter((view) => view.scopeId === (element.parentId ?? null) && view.kind === scopeViewKindFor(project, element))
     if (scopeViews.length && !scopeViews.some((view) => !view.elementRefs.length || view.elementRefs.includes(element.id))) emit('c4.element_in_some_view', 'element', element.id, `${element.name}: hidden from every view`, scopeViews[0].id)
-    if (!relationships.some((relationship) => relationship.sourceId === element.id || relationship.targetId === element.id)) emit('c4.element_has_relationship', 'element', element.id, `${element.name}: no relationships`, viewFor(element))
+    if (!Object.values(allRelationships(project)).some((relationship) => relationship.sourceId === element.id || relationship.targetId === element.id)) emit('c4.element_has_relationship', 'element', element.id, `${element.name}: no relationships`, viewFor(element))
   })
   relationships.forEach((relationship) => {
     // A relationship ending at a system or application container should name the child it reaches once that child view exists.
@@ -212,6 +273,50 @@ export function checkFindings(project: Project, profileId = project.settings.che
     const source = project.elements[relationship.sourceId]
     if (!relationship.label.trim() && relationship.erd?.kind !== 'dependent') emit('c4.relationship_has_label', 'relationship', relationship.id, `${source?.name ?? relationship.sourceId} → ${project.elements[relationship.targetId]?.name ?? relationship.targetId}: no label`, source ? viewFor(source) : undefined)
     if (!isErdRelationship(project, relationship) && !relationship.technology?.trim()) emit('c4.relationship_has_technology', 'relationship', relationship.id, `${source?.name ?? relationship.sourceId} → ${project.elements[relationship.targetId]?.name ?? relationship.targetId}: no technology`, source ? viewFor(source) : undefined)
+  })
+  elements.filter((element) => element.kind === 'component' && project.elements[element.parentId ?? '']?.placeholder).forEach((element) => emit('c4.component_in_placeholder_container', 'element', element.id, `${element.name}: still in ${project.elements[element.parentId!]?.name}`, viewFor(element)))
+  Object.values(derivedRelationships(project)).forEach((relationship) => emit('c4.derived_relationship_not_materialized', 'relationship', relationship.id, `${project.elements[relationship.sourceId]?.name ?? '?'} → ${project.elements[relationship.targetId]?.name ?? '?'}: drawn from DFD flows only`, viewFor(project.elements[relationship.sourceId] ?? elements[0])))
+  views.filter((view) => isDfdView(view.kind)).forEach((view) => {
+    const payload = dfdOf(view)
+    const title = view.useCase || view.name || view.kind
+    Object.values(payload.nodes).forEach((node) => {
+      if (!node.elementId && node.role !== 'diagram_ref') emit('dfd.node_placed_in_model', 'node', node.id, `${title}: ${node.name} is not yet placed in C4 or an ERD`, view.id)
+      if (node.role === 'diagram_ref' && !node.targetViewId) emit('dfd.diagram_ref_resolves', 'node', node.id, `${title}: reference has no target DFD`, view.id)
+      if (!Object.values(payload.flows).some((flow) => flow.sourceNodeId === node.id || flow.targetNodeId === node.id)) emit('dfd.node_has_flow', 'node', node.id, `${title}: ${nodeName(project, node)} has no flows`, view.id)
+    })
+    Object.values(payload.flows).forEach((flow) => {
+      const source = payload.nodes[flow.sourceNodeId]
+      const target = payload.nodes[flow.targetNodeId]
+      if (!source || !target) return
+      const pair = `${nodeName(project, source)} → ${nodeName(project, target)}`
+      if (!flow.label.trim() && !flow.dataRefs.length) emit('dfd.flow_has_payload_or_label', 'flow', flow.id, `${title}: ${pair} has no label and names no data`, view.id)
+      // A response paired with its request, directly or through one intermediate node, is implied by the request (requirement: dfd-flow-direction).
+      const reaches = (from: string, to: string) => Object.values(payload.flows).some((other) => other.sourceNodeId === from && (other.targetNodeId === to || (payload.nodes[other.targetNodeId]?.role === 'intermediate_data' && Object.values(payload.flows).some((next) => next.sourceNodeId === other.targetNodeId && next.targetNodeId === to))))
+      const answersRequest = source.role !== 'start' && reaches(flow.targetNodeId, flow.sourceNodeId) && !(source.role === 'data_store' || target.role === 'data_store')
+      if (answersRequest && (target.role === 'process' || target.role === 'external_entity') && source.role !== 'intermediate_data') emit('dfd.response_flow_drawn', 'flow', flow.id, `${title}: ${pair} answers a request that already implies it`, view.id)
+      if (touchesStore(payload, flow) && !flow.operations.length) emit('dfd.store_flow_has_operations', 'flow', flow.id, `${title}: ${pair} states no C/R/U/D`, view.id)
+    })
+    const start = startNodeOf(payload)
+    if (!start || !Object.values(payload.flows).some((flow) => flow.sourceNodeId === start.id)) emit('dfd.has_start', 'view', view.id, `${title}: no start marker feeding a process`, view.id)
+    // Forward flows that point left after layout, ignoring answers to a flow running the other way (requirement: dfd-flow-direction).
+    const positions = view.layout.positions
+    const leftward = Object.values(payload.flows).filter((flow) => {
+      const source = positions[flow.sourceNodeId]
+      const target = positions[flow.targetNodeId]
+      if (!source || !target || target.x >= source.x) return false
+      return !Object.values(payload.flows).some((other) => other.sourceNodeId === flow.targetNodeId && other.targetNodeId === flow.sourceNodeId)
+    })
+    if (leftward.length) emit('layout.left_to_right_violations', 'view', view.id, `${title}: ${leftward.length} forward flow${leftward.length === 1 ? '' : 's'} point left`, view.id)
+    Object.values(payload.boundaries).forEach((boundary) => {
+      const flows = boundary.flowIds.map((id) => payload.flows[id]).filter(Boolean)
+      if (!flows.length) { emit('dfd.boundary_has_flows', 'boundary', boundary.id, `${title}: ${boundary.name} contains no flows`, view.id); return }
+      if (boundary.consistency !== 'atomic') return
+      const nodes = [...new Set(flows.flatMap((flow) => [flow.sourceNodeId, flow.targetNodeId]))].map((id) => payload.nodes[id]).filter(Boolean)
+      // A store node stands for its data store container (an entity for the store that owns it): two of them is a distributed transaction.
+      const stores = new Set(nodes.filter((node) => node.role === 'data_store').map((node) => { const element = node.elementId ? project.elements[node.elementId] : undefined; return element ? (storeOf(project, element)?.id ?? element.id) : node.id }))
+      if (stores.size > 1) emit('dfd.atomic_boundary_single_store', 'boundary', boundary.id, `${title}: ${boundary.name} spans ${stores.size} data stores (distributed transaction)`, view.id)
+      if (nodes.some((node) => node.role === 'intermediate_data' && node.intermediateKind === 'queue')) emit('dfd.atomic_boundary_no_queue', 'boundary', boundary.id, `${title}: ${boundary.name} crosses a queue (asynchronous hop)`, view.id)
+    })
   })
   return findings
 }

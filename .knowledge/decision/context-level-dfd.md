@@ -3,10 +3,10 @@ id: decision:context-level-dfd
 type: decision
 title: Context-Level DFD
 ---
-Support a context-level DFD as its own diagram kind dfd_context; it carries little detail but makes system-level data ownership explicit and completes the C4 pairing at no extra model cost, while container and component levels remain the primary authoring targets.
+Superseded by decision:dfd-container-level-only: a context-level DFD was to be its own kind dfd_context for cross-system data ownership, but too little would ever be authored there; the c4_context diagram plus data:dfd-diagram-ref links cover that view.
 
 ```yaml
-status: accepted 2026-09-20
+status: superseded 2026-09-21 by decision:dfd-container-level-only; accepted 2026-09-20
 chosen:
   kind: dfd_context; scope project root; processes are software systems; external entities are people and external systems
   purpose: cross-system data ownership, integration overview, and transaction boundaries that cross systems; entry point for diagram references

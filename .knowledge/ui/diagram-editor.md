@@ -25,6 +25,7 @@ ui:
       - kind: explorer
         id: project-explorer
         sections: model_tree_with_groups, entities_under_data_stores, dfds_by_scope_and_use_case, perspectives
+        drag_source: model rows are draggable onto a DFD canvas
         catalogs: vocabulary, domains, tables, dfds (requirement:project-catalogs)
       - kind: catalog_view
         id: project-catalog
@@ -32,13 +33,13 @@ ui:
         controls: search, filters, sort, column_picker, export_csv_markdown, bulk_actions
       - kind: canvas
         id: diagram-canvas
-        actions: select, create, quick_create, connect, move_by_drag, delete, zoom, pan, double_click_enter
+        actions: select, create, quick_create, connect, move_by_drag, delete, zoom, pan, double_click_enter, hover_highlight (requirement:edge-hover-highlight)
         navigation:
           software_system: open child container scope
           application_container: open child component scope
           database_store_container: open erd_component
           entity: open erd_code
-          dfd_process: open next-level dfd of the same use case
+          dfd_bound_node: open the element's own scope
           dfd_diagram_ref: open referenced dfd
           other_element: select and inspect
       - kind: erd_canvas
@@ -49,10 +50,13 @@ ui:
       - kind: dfd_canvas
         id: dfd-canvas
         visible_when: current_diagram.kind starts with dfd_
-        node: external_entity | process (numbered) | data_store | intermediate_data (file | queue) | diagram_ref
+        node: start | external_entity | process (numbered) | process_group (collapsed or expanded) | data_store | intermediate_data (api_document | file | queue) | diagram_ref
+        person_drop: connects the start marker to the UI process instead of adding a node (requirement:dfd-flow-direction)
+        component_drop: offers the component's importable 1:1 links to nodes already present as one-click hops (requirement:c4-links-into-dfd)
         edge: labeled directed flow with CRUD at store ends and entity payload chips; no ordering
         region: dashed transaction boundary with name and atomic or eventual marker
-        actions: add_node_from_model, link_handle_connect, insert_intermediate_data, zoom_process, add_diagram_ref, draw_transaction_boundary
+        actions: drop_element_from_explorer, quick_create_free_node, link_handle_connect, connect_processes_groups_and_inserts_api_document_or_file_or_queue, add_diagram_ref, boundary_from_selected_flows
+        node_inspector: bound shows element and zoom; free edits name, role, intermediate kind, offers place_into_model and bind_to_existing (decision:dfd-first-free-nodes)
       - kind: volume_bubble_chart
         id: data-volume-chart
         opened_from: erd canvas toolbar, data store inspector, explorer

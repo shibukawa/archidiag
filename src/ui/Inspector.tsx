@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ancestorIds, APPLICATION_KINDS, CARDINALITIES, childrenOf, childViewKind, DATA_STORE_KINDS, defaultErdRelationship, effectiveCategory, entitiesOfStore, ENTITY_CLASSIFICATIONS, ENTITY_STORAGES, ERD_RELATIONSHIP_KINDS, estimateVolume, formatBytes, formatCount, GROWTH_PERIODS, isErdRelationship, isErdStore, LEVEL_BY_VIEW_KIND, makeAttribute, REFRESH_EVERY, REFRESH_MODES, SQL_STORE_KINDS, type ApplicationKind, type Attribute, type Cardinality, type ContainerCategory, type DataStoreKind, type DiagramView, type Element, type EntityClassification, type EntityStorage, type EntityVolume, type ErdRelationshipKind, type GrowthPeriod, type Group, type Project, type RefreshEvery, type RefreshMode, type Relationship, type SqlDialect } from '../core/model'
+import { allRelationships, dfdOf, dfdUsage } from '../core/dfd'
+import { isDfdView, isStoreItem } from '../core/model'
 import { scopeElements } from '../core/views'
+import { BoundaryEditor, DfdViewEditor, FlowEditor, GroupEditor, MultiFlows, MultiNodes, NodeEditor, type DfdActions } from './DfdInspector'
 import type { Copy } from './i18n'
-import { roleLabel } from './i18n'
+import { dfdLabel, roleLabel } from './i18n'
 import { Icon } from './icons'
 
 export interface InspectorProps {
@@ -25,13 +28,25 @@ export interface InspectorProps {
   onDeleteGroup: (id: string) => void
   onCopyLink: () => void
   onSelect: (id: string) => void
+  onOpenView: (viewId: string) => void
+  /** Promotes a derived relationship to a stored one (decision: dfd-drives-c4). */
+  onMaterialize: (relationship: Relationship) => void
+  /** DFD editing; present when the current view is a DFD. */
+  dfd?: DfdActions
 }
 
 export function Inspector(props: InspectorProps) {
   const { project, view, selectedIds, copy } = props
   const ids = [...selectedIds]
-  const elements = ids.map((id) => project.elements[id]).filter(Boolean)
-  const relationship = ids.length === 1 ? project.relationships[ids[0]] : undefined
+  const dfd = isDfdView(view.kind) && props.dfd ? props.dfd : undefined
+  const payload = dfd ? dfdOf(view) : undefined
+  const nodes = payload ? ids.map((id) => payload.nodes[id]).filter(Boolean) : []
+  const flows = payload ? ids.map((id) => payload.flows[id]).filter(Boolean) : []
+  const boundary = payload && ids.length === 1 ? payload.boundaries[ids[0]] : undefined
+  const processGroups = payload ? ids.map((id) => payload.groups[id]).filter(Boolean) : []
+  const elements = dfd ? [] : ids.map((id) => project.elements[id]).filter(Boolean)
+  const relationship = !dfd && ids.length === 1 ? allRelationships(project)[ids[0]] : undefined
+  const dfdSelection = nodes.length + flows.length + processGroups.length + (boundary ? 1 : 0)
   return (
     <aside className="flex min-h-0 flex-col border-l border-line/80 bg-panel/45">
       <div className="flex items-center justify-between border-b border-line/80 px-4 py-3">
@@ -42,7 +57,14 @@ export function Inspector(props: InspectorProps) {
         {elements.length === 1 && <ElementEditor {...props} element={elements[0]} />}
         {elements.length > 1 && <MultiSelection {...props} elements={elements} />}
         {relationship && <RelationshipEditor {...props} relationship={relationship} />}
-        {elements.length === 0 && !relationship && <ViewEditor {...props} />}
+        {!dfd && elements.length === 0 && !relationship && <ViewEditor {...props} />}
+        {dfd && payload && nodes.length === 1 && flows.length === 0 && processGroups.length === 0 && <NodeEditor project={project} view={view} payload={payload} node={nodes[0]} copy={copy} actions={dfd} onSelect={props.onSelect} onEndBatch={props.onEndBatch} />}
+        {dfd && payload && processGroups.length === 1 && nodes.length === 0 && <GroupEditor project={project} view={view} payload={payload} group={processGroups[0]} copy={copy} actions={dfd} onSelect={props.onSelect} onEndBatch={props.onEndBatch} />}
+        {dfd && payload && nodes.length + processGroups.length > 1 && <MultiNodes project={project} nodes={nodes} groups={processGroups} copy={copy} actions={dfd} />}
+        {dfd && payload && flows.length === 1 && nodes.length === 0 && <FlowEditor project={project} view={view} payload={payload} flow={flows[0]} copy={copy} actions={dfd} onSelect={props.onSelect} onEndBatch={props.onEndBatch} />}
+        {dfd && payload && flows.length > 1 && <MultiFlows project={project} payload={payload} flows={flows} copy={copy} actions={dfd} />}
+        {dfd && payload && boundary && <BoundaryEditor project={project} payload={payload} boundary={boundary} copy={copy} actions={dfd} onSelect={props.onSelect} onEndBatch={props.onEndBatch} />}
+        {dfd && payload && dfdSelection === 0 && <DfdViewEditor project={project} view={view} payload={payload} copy={copy} actions={dfd} onPatchView={props.onPatchView} onSelect={props.onSelect} onEndBatch={props.onEndBatch} />}
       </div>
     </aside>
   )
@@ -61,13 +83,14 @@ export function RadioRow({ name, value, options, onChange }: { name: string; val
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-muted">{label}<div className="mt-1 normal-case tracking-normal">{children}</div></label>
 }
 
-function ElementEditor({ project, view, element, copy, groups, onPatchElement, onDeleteElements, onOpenScope, onSelect, onEndBatch, onSetHorizon }: InspectorProps & { element: Element }) {
+function ElementEditor({ project, view, element, copy, groups, onPatchElement, onDeleteElements, onOpenScope, onSelect, onEndBatch, onSetHorizon, onOpenView }: InspectorProps & { element: Element }) {
   const kind = childViewKind(element)
-  const related = Object.values(project.relationships).filter((relationship) => relationship.sourceId === element.id || relationship.targetId === element.id)
+  const related = Object.values(allRelationships(project)).filter((relationship) => relationship.sourceId === element.id || relationship.targetId === element.id)
+  const usage = dfdUsage(project, element.id)
   const scopeGroups = groups.filter((group) => group.scopeId === (element.parentId ?? null))
   return (
     <div>
@@ -77,7 +100,11 @@ function ElementEditor({ project, view, element, copy, groups, onPatchElement, o
       </div>
       <Field label={copy.name}><input className="inspector-input" value={element.name} onChange={(event) => onPatchElement(element.id, { name: event.target.value }, `${element.id}:name`)} onBlur={onEndBatch} /></Field>
       <Field label={copy.description}><textarea className="inspector-input min-h-[72px]" value={element.description} onChange={(event) => onPatchElement(element.id, { description: event.target.value }, `${element.id}:description`)} onBlur={onEndBatch} /></Field>
-      {element.kind !== 'entity' && <Field label={copy.technology}><input className="inspector-input" value={element.technology} onChange={(event) => onPatchElement(element.id, { technology: event.target.value }, `${element.id}:technology`)} onBlur={onEndBatch} /></Field>}
+      {element.kind !== 'entity' && !isStoreItem(element) && <Field label={copy.technology}><input className="inspector-input" value={element.technology} onChange={(event) => onPatchElement(element.id, { technology: event.target.value }, `${element.id}:technology`)} onBlur={onEndBatch} /></Field>}
+      {element.kind === 'component' && (
+        <label className="mb-3 flex cursor-pointer items-start gap-2 text-xs"><input type="checkbox" className="checkbox checkbox-xs mt-0.5" checked={Boolean(element.passthrough)} onChange={(event) => onPatchElement(element.id, { passthrough: event.target.checked || undefined })} /><span>{copy.passthrough}<span className="block text-[10px] leading-4 text-muted">{copy.passthroughHint}</span></span></label>
+      )}
+      {element.placeholder && <div className="mb-3 rounded-lg border border-amber/40 bg-amber/10 px-3 py-2 text-[11px] leading-4 text-amber">{copy.placeholderHint}</div>}
       {isErdStore(element) && (() => {
         const entities = entitiesOfStore(project, element.id)
         const total = entities.reduce((sum, entity) => sum + (estimateVolume(entity.volume, project.settings.volumeHorizonMonths)?.bytes ?? 0), 0)
@@ -145,6 +172,18 @@ function ElementEditor({ project, view, element, copy, groups, onPatchElement, o
         })}
         <p className="mt-1 text-[10px] text-muted">{copy.connectHint}</p>
       </div>
+      {usage.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.referencedByDfds} · {usage.length}</div>
+          {usage.map(({ view: dfdView, node }) => (
+            <button key={node.id} type="button" onClick={() => onOpenView(dfdView.id)} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-muted hover:bg-white/5 hover:text-base-content">
+              <Icon name="flow" size={12} className="shrink-0" />
+              <span className="truncate">{dfdLabel(copy, dfdView)}</span>
+              <span className="ml-auto truncate text-[10px] italic">{copy.roles[node.role]}{node.processNumber ? ` ${node.processNumber}` : ''}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="text-[10px] text-muted">{copy.view}: {view.name || copy.defaultView}</div>
       <button type="button" className="btn btn-ghost btn-sm mt-4 w-full justify-start text-rose-400 hover:bg-rose-500/10" onClick={() => onDeleteElements([element.id])}><Icon name="trash" size={14} />{copy.deleteElement}</button>
     </div>
@@ -161,9 +200,34 @@ function MultiSelection({ elements, copy, onDeleteElements }: InspectorProps & {
   )
 }
 
-function RelationshipEditor({ project, view, relationship, copy, onPatchRelationship, onDeleteRelationship, onSelect, onEndBatch }: InspectorProps & { relationship: Relationship }) {
+function RelationshipEditor({ project, view, relationship, copy, onPatchRelationship, onDeleteRelationship, onSelect, onEndBatch, onOpenView, onMaterialize }: InspectorProps & { relationship: Relationship }) {
   const source = project.elements[relationship.sourceId]
   const target = project.elements[relationship.targetId]
+  if (relationship.derived) {
+    // A line that exists only because of DFD flows: read-only, with the flows that make it and a way to keep it (decision: dfd-drives-c4).
+    return (
+      <div>
+        <div className="mb-4 rounded-lg border border-line bg-ink/40 px-3 py-2 text-xs">
+          <div className="section-label mb-1">{copy.derivedRelationship}</div>
+          <button type="button" className="hover:text-cyan" onClick={() => onSelect(relationship.sourceId)}>{source?.name}</button>
+          <span className="mx-1 text-muted">→</span>
+          <button type="button" className="hover:text-cyan" onClick={() => onSelect(relationship.targetId)}>{target?.name}</button>
+        </div>
+        <p className="mb-3 text-[10px] leading-4 text-muted">{copy.derivedHint}</p>
+        <div className="mb-3">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.onThisLine}</div>
+          {(relationship.derived.members ?? []).map((member) => {
+            const dfdView = project.views[member.viewId]
+            const flow = dfdView?.dfd?.flows[member.flowId]
+            return <button key={`${member.viewId}-${member.flowId}`} type="button" onClick={() => onOpenView(member.viewId)} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-muted hover:bg-white/5 hover:text-base-content"><Icon name="flow" size={12} className="shrink-0" /><span className="truncate italic">{flow?.label || '—'}</span><span className="ml-auto truncate text-[10px]">{dfdView ? copy.derivedFrom(dfdLabel(copy, dfdView)) : ''}</span></button>
+          })}
+        </div>
+        <button type="button" className="btn btn-primary btn-sm w-full justify-start text-ink" onClick={() => onMaterialize(relationship)}><Icon name="link" size={14} />{copy.materialize}</button>
+      </div>
+    )
+  }
+  // Stored relationship: flows that carry it (imported into DFDs) draw on the same line.
+  const carryingFlows = Object.values(project.views).flatMap((dfdView) => Object.values(dfdView.dfd?.flows ?? {}).filter((flow) => flow.relationshipRef === relationship.id).map((flow) => ({ dfdView, flow })))
   // Entity-to-entity lines carry the ERD record; an older project may lack it, so default it on the fly.
   const erd = isErdRelationship(project, relationship) ? relationship.erd ?? defaultErdRelationship() : undefined
   const level = LEVEL_BY_VIEW_KIND[view.kind]
@@ -212,6 +276,12 @@ function RelationshipEditor({ project, view, relationship, copy, onPatchRelation
         <Field label={copy.technology}><input className="inspector-input" value={relationship.technology ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { technology: event.target.value }, `${relationship.id}:technology`)} onBlur={onEndBatch} /></Field>
       )}
       <Field label={copy.description}><textarea className="inspector-input min-h-[60px]" value={relationship.description ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { description: event.target.value }, `${relationship.id}:description`)} onBlur={onEndBatch} /></Field>
+      {carryingFlows.length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.onThisLine}</div>
+          {carryingFlows.map(({ dfdView, flow }) => <button key={flow.id} type="button" onClick={() => onOpenView(dfdView.id)} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-muted hover:bg-white/5 hover:text-base-content"><Icon name="flow" size={12} className="shrink-0" /><span className="truncate italic">{flow.label || '—'}</span><span className="ml-auto truncate text-[10px]">{dfdLabel(copy, dfdView)}</span></button>)}
+        </div>
+      )}
       {siblingsOnLine.length > 0 && (
         <div className="mb-3">
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.sameLine}</div>

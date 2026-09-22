@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import { arrangeView } from '../core/arrange'
 import * as commands from '../core/commands'
 import { parseProject, serializeProject } from '../core/io'
-import { alignBoxes, arrangeBoxes, distributeBoxes, nextFreePosition, nodeSize, nodeSizeFor, spaceBoxes, type AlignMode, type ArrangeMode, type Box } from '../core/layout'
-import { childViewKind, defaultErdRelationship, displayModesFor, emptyProject, isErdStore, isErdView, scopeViewKindFor, storeOf, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from '../core/model'
+import { allRelationships, connectionVerdict, dfdOf, importableLinks, nodeElement, nodeName, nextProcessNumber, roleForElement, type PlacementOption } from '../core/dfd'
+import { alignBoxes, arrangeBoxes, dfdNodeSize, distributeBoxes, nextFreePosition, nodeSize, nodeSizeFor, spaceBoxes, type AlignMode, type ArrangeMode, type Box } from '../core/layout'
+import { childViewKind, defaultErdRelationship, displayModesFor, emptyProject, isDfdView, isErdStore, isErdView, itemKindFor, pairedC4Kind, pairedDfdKind, scopeViewKindFor, storeOf, type DfdNode, type DiagramView, type Element, type IntermediateKind, type Position, type Project, type Rect, type Relationship, type ViewKind } from '../core/model'
 import { buildRenderModel } from '../core/render'
 import { commerceStarter } from '../core/starter'
 import { THEMES } from '../core/theme'
@@ -12,7 +13,8 @@ import { breadcrumb, defaultView, ensureDefaultView, viewsForScope } from '../co
 import { Canvas } from './Canvas'
 import { Explorer } from './Explorer'
 import { exportView, fileStem, type ExportFormat } from './exporters'
-import { COPY, renderLabels, viewTitle, type Locale } from './i18n'
+import type { DfdActions } from './DfdInspector'
+import { COPY, dfdLabel, renderLabels, viewTitle, type Locale } from './i18n'
 import { Icon, type IconName } from './icons'
 import { Inspector } from './Inspector'
 import { QuickCreate, type QuickCreateInput } from './QuickCreate'
@@ -59,6 +61,7 @@ export default function App() {
   const [showNew, setShowNew] = useState(false)
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
+  const [pendingIntermediate, setPendingIntermediate] = useState<{ sourceId: string; targetId: string } | null>(null)
   const [webMcpReady, setWebMcpReady] = useState(false)
   const lastCreated = useRef<Rect | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -111,8 +114,12 @@ export default function App() {
   const findings = useMemo(() => allFindings(project), [project])
   const groups = useMemo(() => Object.values(project.groups), [project.groups])
   const scopeGroups = useMemo(() => groups.filter((group) => group.scopeId === view.scopeId), [groups, view.scopeId])
-  const crumbs = useMemo(() => breadcrumb(project, view, copy.breadcrumbRoot), [copy.breadcrumbRoot, project, view])
-  const siblingViews = useMemo(() => viewsForScope(project, view.kind, view.scopeId), [project, view.kind, view.scopeId])
+  const isDfd = isDfdView(view.kind)
+  const crumbs = useMemo(() => breadcrumb(project, view, copy.breadcrumbRoot, dfdLabel(copy, view)), [copy, project, view])
+  // The navigator shows the scope's C4 (or ERD) views and its DFDs side by side (rule: dfd-c4-pairing side_by_side).
+  const siblingViews = useMemo(() => viewsForScope(project, isDfd ? pairedC4Kind(view.kind) : view.kind, view.scopeId), [isDfd, project, view.kind, view.scopeId])
+  const dfdKind = pairedDfdKind(view.kind)
+  const dfdSiblings = useMemo(() => (dfdKind ? viewsForScope(project, dfdKind, view.scopeId) : []), [dfdKind, project, view.scopeId])
   const selectedNodes = useMemo(() => model.nodes.filter((node) => selectedIds.has(node.id)), [model.nodes, selectedIds])
 
   const say = useCallback((message: string) => setNotice(message), [])
@@ -135,15 +142,47 @@ export default function App() {
     if (!projectRef.current.views[id]) return false
     setCurrentViewId(id)
     setSelectedIds(new Set())
+    setPendingIntermediate(null)
     lastCreated.current = null
     return true
   }, [projectRef])
 
-  const enter = useCallback((elementId: string) => {
-    const element = projectRef.current.elements[elementId]
+  /** Opens the selected element's scope view in C4 or ERD and selects it there. */
+  const openElement = useCallback((id: string) => {
+    const current = projectRef.current
+    const element = current.elements[id]
+    if (!element) return
+    const scopeKind: ViewKind = scopeViewKindFor(current, element)
+    const currentView = current.views[currentViewId ?? '']
+    if (!currentView || currentView.scopeId !== (element.parentId ?? null) || currentView.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null)
+    setSelectedIds(new Set([id]))
+  }, [currentViewId, openScope, projectRef])
+
+  /** Double-click on a group toggles collapse; on a reference opens its target DFD; on a bound node enters the element's own C4 or ERD scope. */
+  const zoomProcess = useCallback((nodeId: string) => {
+    const current = projectRef.current
+    const currentView = current.views[view.id]
+    if (currentView?.dfd?.groups[nodeId]) {
+      const collapsed = (currentView.layout.collapsedGroupIds ?? []).includes(nodeId)
+      commit((state) => commands.setGroupCollapsed(state, view.id, nodeId, !collapsed))
+      setSelectedIds(new Set([nodeId]))
+      return
+    }
+    const node = currentView?.dfd?.nodes[nodeId]
+    if (!node) return
+    if (node.role === 'diagram_ref') { if (node.targetViewId) openView(node.targetViewId); return }
+    if (!node.elementId) { say(copy.needsPlacement); return }
+    const element = current.elements[node.elementId]
     const kind = element ? childViewKind(element) : undefined
-    if (kind) openScope(kind, elementId)
-  }, [openScope, projectRef])
+    if (kind) openScope(kind, element!.id)
+  }, [commit, copy.needsPlacement, openScope, openView, projectRef, say, view.id])
+
+  const enter = useCallback((id: string) => {
+    if (isDfd) { zoomProcess(id); return }
+    const element = projectRef.current.elements[id]
+    const kind = element ? childViewKind(element) : undefined
+    if (kind) openScope(kind, id)
+  }, [isDfd, openScope, projectRef, zoomProcess])
 
   const select = useCallback((ids: string[], additive: boolean) => {
     setSelectedIds((current) => {
@@ -155,7 +194,8 @@ export default function App() {
   }, [])
 
   // The optional batch key folds a text field's keystrokes into one undo step until the field blurs (rule: undo-scope).
-  const patchElement = useCallback((id: string, patch: Partial<Element>, batchKey?: string) => commit((current) => commands.patchElement(current, id, patch), batchKey), [commit])
+  const patchElement = useCallback((id: string, patch: Partial<Element>, batchKey?: string) => commit((current) => commands.pruneEmptyPlaceholders(commands.patchElement(current, id, patch)), batchKey), [commit])
+  const materialize = useCallback((relationship: Relationship) => { const result = commands.materializeRelationship(projectRef.current, relationship); commit(() => result.project); setSelectedIds(new Set([result.relationship.id])) }, [commit, projectRef])
   const patchRelationship = useCallback((id: string, patch: Partial<Relationship>, batchKey?: string) => commit((current) => commands.patchRelationship(current, id, patch), batchKey), [commit])
   const patchView = useCallback((patch: Partial<DiagramView>, batchKey?: string) => commit((current) => commands.patchView(current, view.id, patch), batchKey), [commit, view.id])
 
@@ -164,7 +204,7 @@ export default function App() {
     const hasChildren = ids.some((id) => Object.values(current.elements).some((element) => element.parentId === id))
     if (hasChildren && !window.confirm(copy.confirmDelete)) return []
     const result = commands.deleteElements(current, ids)
-    commit(() => result.project)
+    commit(() => commands.pruneEmptyPlaceholders(result.project))
     setSelectedIds(new Set())
     say(`${ids.map((id) => current.elements[id]?.name).filter(Boolean).join(', ')} ${copy.deleted}`)
     return result.deletedIds
@@ -177,9 +217,137 @@ export default function App() {
     return true
   }, [commit, projectRef])
 
+  // ---------- DFD ----------
+
+  const dfdActions: DfdActions = useMemo(() => ({
+    patchNode: (nodeId, patch, batchKey) => commit((current) => {
+      const payload = dfdOf(current.views[view.id])
+      const node = payload.nodes[nodeId]
+      // A free node turned into a process takes the next number; numbers are never reused (data:dfd-model process_number).
+      if (node && patch.role === 'process' && !node.processNumber) {
+        const next = nextProcessNumber(payload)
+        return commands.patchNode(commands.upsertView(current, { ...current.views[view.id], dfd: next.payload }), view.id, nodeId, { ...patch, processNumber: next.number })
+      }
+      return commands.patchNode(current, view.id, nodeId, patch)
+    }, batchKey),
+    deleteNodes: (nodeIds) => { commit((current) => commands.deleteNodes(current, view.id, nodeIds)); setSelectedIds(new Set()) },
+    placeNode: (nodeId, option: PlacementOption) => {
+      const result = commands.placeNode(projectRef.current, view.id, nodeId, option)
+      commit(() => result.project)
+      if (result.element) say(`${result.element.name} ${copy.elementAdded}`)
+    },
+    bindNode: (nodeId, elementId) => commit((current) => commands.bindNode(current, view.id, nodeId, elementId)),
+    unbindNode: (nodeId) => commit((current) => { const node = current.views[view.id]?.dfd?.nodes[nodeId]; return node ? commands.patchNode(current, view.id, nodeId, { elementId: undefined, name: nodeName(current, node), description: node.description || (nodeElement(current, node)?.description ?? ''), technology: node.technology || (nodeElement(current, node)?.technology ?? '') }) : current }),
+    zoomProcess,
+    openElement,
+    patchFlow: (flowId, patch, batchKey) => commit((current) => commands.patchFlow(current, view.id, flowId, patch), batchKey),
+    deleteFlow: (flowId) => { commit((current) => commands.deleteFlow(current, view.id, flowId)); setSelectedIds(new Set()) },
+    createBoundary: (flowIds) => {
+      const created = commands.createBoundary(projectRef.current, view.id, `${copy.dfdBoundary} ${Object.keys(dfdOf(projectRef.current.views[view.id]).boundaries).length + 1}`, flowIds)
+      commit(() => created.project)
+      if (created.boundary) setSelectedIds(new Set([created.boundary.id]))
+    },
+    patchBoundary: (boundaryId, patch, batchKey) => commit((current) => commands.patchBoundary(current, view.id, boundaryId, patch), batchKey),
+    deleteBoundary: (boundaryId) => { commit((current) => commands.deleteBoundary(current, view.id, boundaryId)); setSelectedIds(new Set()) },
+    importLink: (link) => {
+      const imported = commands.importLink(projectRef.current, view.id, link)
+      commit(() => imported.project)
+      if (imported.node) { setSelectedIds(new Set([imported.node.id])); say(`${link.relationship.label || '?'} ${copy.importedLink}`) }
+    },
+    importAllLinks: () => {
+      let next = projectRef.current
+      let count = 0
+      for (let guard = 0; guard < 100; guard += 1) {
+        const link = importableLinks(next, next.views[view.id])[0]
+        if (!link) break
+        const imported = commands.importLink(next, view.id, link)
+        if (!imported.node) break
+        next = imported.project
+        count += 1
+      }
+      commit(() => next)
+      say(`${count} ${copy.importedLink}`)
+    },
+    groupMembers: (memberIds) => { const created = commands.groupMembers(projectRef.current, view.id, memberIds); commit(() => created.project); if (created.group) setSelectedIds(new Set([created.group.id])) },
+    patchGroup: (groupId, patch, batchKey) => commit((current) => commands.patchProcessGroup(current, view.id, groupId, patch), batchKey),
+    ungroup: (groupId) => { commit((current) => commands.ungroupMembers(current, view.id, groupId)); setSelectedIds(new Set()) },
+    removeFromGroup: (memberId) => commit((current) => commands.removeFromGroup(current, view.id, memberId)),
+    setGroupCollapsed: (groupId, collapsed) => commit((current) => commands.setGroupCollapsed(current, view.id, groupId, collapsed)),
+    addDiagramRef: (targetViewId) => {
+      const target = projectRef.current.views[targetViewId]
+      const size = dfdNodeSize('diagram_ref', view.displayMode)
+      const position = nextFreePosition(model.nodes.map((node) => node.rect), size, lastCreated.current ?? undefined)
+      const added = commands.addFreeNode(projectRef.current, view.id, { role: 'diagram_ref', name: target ? dfdLabel(copy, target) : '', targetViewId }, position)
+      commit(() => added.project)
+      lastCreated.current = { ...position, ...size }
+      if (added.node) setSelectedIds(new Set([added.node.id]))
+    },
+    openView,
+  }), [commit, copy, model.nodes, openElement, openView, projectRef, say, view.displayMode, view.id, zoomProcess])
+
+  /** An element dragged from the explorer becomes a bound node at the drop point; an element already present is selected instead. */
+  const dropElement = useCallback((elementId: string, position: Position) => {
+    const current = projectRef.current
+    const currentView = current.views[view.id]
+    if (!currentView || !isDfdView(currentView.kind)) { say(copy.dropNotDfd); return }
+    const existing = Object.values(dfdOf(currentView).nodes).find((node) => node.elementId === elementId)
+    if (existing) { setSelectedIds(new Set([existing.id])); say(`${current.elements[elementId]?.name ?? ''} ${copy.alreadyInDfd}`); return }
+    const element = current.elements[elementId]
+    // People are not nodes: the start marker connects to the screen the person uses (requirement: dfd-flow-direction).
+    if (element?.kind === 'person') {
+      const connected = commands.connectStartForPerson(current, view.id, elementId)
+      commit(() => connected.project)
+      if (connected.node) { setSelectedIds(new Set([connected.node.id])); say(`${copy.personNotNode} ${nodeName(connected.project, connected.node)}`) } else say(copy.personNoTarget)
+      return
+    }
+    if (element && !roleForElement(current, currentView, element)) { say(copy.dropNotDfd); return }
+    const added = commands.addBoundNode(current, view.id, elementId, position)
+    commit(() => added.project)
+    if (added.node) { setSelectedIds(new Set([added.node.id])); say(`${current.elements[elementId]?.name ?? ''} ${copy.nodeAdded}`) }
+  }, [commit, copy.alreadyInDfd, copy.dropNotDfd, copy.nodeAdded, projectRef, say, view.id])
+
+  /** Creates a DFD paired with the current scope and level; the use case is asked for up front (flow: dfd-authoring define). */
+  const newDfd = useCallback(() => {
+    if (!dfdKind) return
+    const useCase = window.prompt(copy.useCasePlaceholder, '')
+    if (useCase === null) return
+    const created = commands.createDfd(projectRef.current, dfdKind, view.scopeId, useCase.trim())
+    commit(() => created.project)
+    openView(created.view.id)
+  }, [commit, copy.useCasePlaceholder, dfdKind, openView, projectRef, view.scopeId])
+
+  const midpointBetween = useCallback((sourceId: string, targetId: string, role: DfdNode['role']) => {
+    const source = model.nodes.find((node) => node.id === sourceId)?.rect
+    const target = model.nodes.find((node) => node.id === targetId)?.rect
+    const size = dfdNodeSize(role, view.displayMode)
+    if (!source || !target) return undefined
+    return { x: Math.round((source.x + source.width + target.x) / 2 - size.width / 2), y: Math.round((source.y + target.y) / 2 + Math.max(source.height, target.height) / 2 - size.height / 2) }
+  }, [model.nodes, view.displayMode])
+
+  // Two processes linked become one logical process with intermediate data between them (decision: dfd-logical-process-group).
+  const chooseIntermediate = useCallback((kind: IntermediateKind | null) => {
+    const pending = pendingIntermediate
+    setPendingIntermediate(null)
+    if (!pending || !kind) return
+    const name = kind === 'api_document' ? copy.apiDocumentName : copy.intermediateName
+    const linked = commands.linkProcesses(projectRef.current, view.id, pending.sourceId, pending.targetId, kind, name, midpointBetween(pending.sourceId, pending.targetId, 'intermediate_data'))
+    commit(() => linked.project)
+    if (linked.node) setSelectedIds(new Set([linked.node.id]))
+  }, [commit, copy.apiDocumentName, copy.intermediateName, midpointBetween, pendingIntermediate, projectRef, view.id])
+
   const createFromQuick = useCallback((input: QuickCreateInput) => {
     const current = projectRef.current
     const existing = model.nodes.map((node) => node.rect)
+    if (isDfd && input.dfdRole) {
+      const size = dfdNodeSize(input.dfdRole, view.displayMode)
+      const position = nextFreePosition(existing, size, lastCreated.current ?? undefined)
+      const added = commands.addFreeNode(current, view.id, { role: input.dfdRole, name: input.name, description: input.description, intermediateKind: input.intermediateKind }, position)
+      commit(() => added.project)
+      lastCreated.current = { ...position, ...size }
+      if (added.node) setSelectedIds(new Set([added.node.id]))
+      say(`${input.name} ${copy.nodeAdded}`)
+      return
+    }
     const region = model.boundary && view.kind !== 'c4_context' ? model.boundary : undefined
     // A new table starts with its surrogate primary key; under an owner entity it also gets its dependent link.
     const created = input.kind === 'entity'
@@ -196,7 +364,7 @@ export default function App() {
         sqlDialect: input.sqlDialect,
         groupId: input.groupId,
       })
-    const size = input.kind === 'entity' ? nodeSizeFor(created.element, view.displayMode) : nodeSize(view.displayMode)
+    const size = input.kind === 'entity' || input.kind === 'topic' || input.kind === 'folder' ? nodeSizeFor(created.element, view.displayMode) : nodeSize(view.displayMode)
     const position = nextFreePosition(existing, size, lastCreated.current ?? undefined, region)
     let next = commands.setPositions(created.project, view.id, { [created.element.id]: position })
     if (view.elementRefs.length) next = commands.patchView(next, view.id, { elementRefs: [...view.elementRefs, created.element.id] })
@@ -204,7 +372,7 @@ export default function App() {
     lastCreated.current = { ...position, ...size }
     setSelectedIds(new Set([created.element.id]))
     say(`${input.name} ${copy.elementAdded}`)
-  }, [commit, copy.elementAdded, model.boundary, model.nodes, projectRef, say, view])
+  }, [commit, copy.elementAdded, copy.nodeAdded, isDfd, model.boundary, model.nodes, projectRef, say, view])
 
   const commitPositions = useCallback((positions: Record<string, Position>, boundary?: Rect, droppedId?: string) => {
     commit((current) => {
@@ -226,6 +394,29 @@ export default function App() {
 
   const connect = useCallback((sourceId: string, targetId: string) => {
     const current = projectRef.current
+    if (isDfd) {
+      // rule: dfd-connection-policy. Process to process asks for file or queue; data to data gets a process inserted.
+      const payload = dfdOf(current.views[view.id])
+      const source = payload.nodes[sourceId]
+      const target = payload.nodes[targetId]
+      if (!source || !target) return
+      const duplicate = Object.values(payload.flows).find((flow) => flow.sourceNodeId === sourceId && flow.targetNodeId === targetId)
+      if (duplicate) { setSelectedIds(new Set([duplicate.id])); return }
+      const verdict = connectionVerdict(source, target)
+      if (verdict.kind === 'forbidden') { say(copy.startOnlyToProcess); return }
+      if (verdict.kind === 'process_to_process') { setPendingIntermediate({ sourceId, targetId }); return }
+      if (verdict.kind === 'data_to_data') {
+        const inserted = commands.insertProcess(current, view.id, sourceId, targetId, copy.insertedProcess, midpointBetween(sourceId, targetId, 'process'))
+        commit(() => inserted.project)
+        if (inserted.node) setSelectedIds(new Set([inserted.node.id]))
+        say(copy.storeToStore)
+        return
+      }
+      const created = commands.createFlow(current, view.id, { sourceNodeId: sourceId, targetNodeId: targetId })
+      commit(() => created.project)
+      if (created.flow) setSelectedIds(new Set([created.flow.id]))
+      return
+    }
     const existing = Object.values(current.relationships).find((relationship) => relationship.sourceId === sourceId && relationship.targetId === targetId)
     if (existing) { setSelectedIds(new Set([existing.id])); return }
     // Entity to entity: a reference from the many side to the one side, editable in the inspector.
@@ -233,7 +424,7 @@ export default function App() {
     const created = commands.createRelationship(current, { sourceId, targetId, label: '', ...(erd ? { erd } : {}) })
     commit(() => created.project)
     setSelectedIds(new Set([created.relationship.id]))
-  }, [commit, projectRef])
+  }, [commit, copy.insertedProcess, copy.storeToStore, isDfd, midpointBetween, projectRef, say, view.id])
 
   const applyLayout = useCallback((compute: (boxes: Box[]) => Record<string, Position>) => {
     const boxes: Box[] = selectedNodes.map((node) => ({ id: node.id, ...node.rect }))
@@ -289,7 +480,7 @@ export default function App() {
 
   const navigateFinding = useCallback((finding: Finding) => {
     if (finding.viewId && projectRef.current.views[finding.viewId]) openView(finding.viewId)
-    if (finding.targetKind === 'element' || finding.targetKind === 'relationship') setSelectedIds(new Set([finding.targetId]))
+    if (finding.targetKind !== 'view' && finding.targetKind !== 'group' && finding.targetKind !== 'project') setSelectedIds(new Set([finding.targetId]))
   }, [openView, projectRef])
 
   const copyLink = useCallback(() => {
@@ -305,17 +496,26 @@ export default function App() {
       if (typing) return
       if (event.key === 'Delete' || event.key === 'Backspace') {
         const ids = [...selectedIds]
+        if (isDfd) {
+          const payload = dfdOf(projectRef.current.views[view.id])
+          const nodeIds = ids.filter((id) => payload.nodes[id])
+          if (nodeIds.length) dfdActions.deleteNodes(nodeIds)
+          ids.filter((id) => payload.flows[id]).forEach((id) => dfdActions.deleteFlow(id))
+          ids.filter((id) => payload.boundaries[id]).forEach((id) => dfdActions.deleteBoundary(id))
+          ids.filter((id) => payload.groups[id]).forEach((id) => dfdActions.ungroup(id))
+          return
+        }
         const elementIds = ids.filter((id) => projectRef.current.elements[id])
         const relationshipIds = ids.filter((id) => projectRef.current.relationships[id])
         if (elementIds.length) deleteElements(elementIds)
         relationshipIds.forEach((id) => deleteRelationship(id))
       }
-      if (event.key === 'Escape') { setSelectedIds(new Set()); setQuickCreate(false) }
+      if (event.key === 'Escape') { setSelectedIds(new Set()); setQuickCreate(false); setPendingIntermediate(null) }
       if (event.key === 'n' && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setQuickCreate(true) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [deleteElements, deleteRelationship, projectRef, redo, selectedIds, undo])
+  }, [deleteElements, deleteRelationship, dfdActions, isDfd, projectRef, redo, selectedIds, undo, view.id])
 
   // WebMCP tool surface: the agent is another editor.
   useEffect(() => registerWebMcpTools({
@@ -330,9 +530,10 @@ export default function App() {
       if (input.kind === 'container' && parent?.kind !== 'softwareSystem') return { error: 'Containers need a software system parent' }
       if (input.kind === 'component' && parent?.kind !== 'container') return { error: 'Components need an application container parent' }
       if (input.kind === 'entity' && !isErdStore(parent) && parent?.kind !== 'entity') return { error: 'Entities need a database or database schema container parent, or an owner entity for a dependent table' }
+      if ((input.kind === 'topic' || input.kind === 'folder') && itemKindFor(parent) !== input.kind) return { error: input.kind === 'topic' ? 'Topics need a pub/sub or queue container parent' : 'Folders need a bucket or file share container parent' }
       const created = input.kind === 'entity'
         ? commands.createEntity(current, { name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, classification: input.classification, storageKind: input.storageKind })
-        : commands.createElement(current, { kind: input.kind, name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, containerCategory: input.containerCategory, applicationKind: input.applicationKind, dataStoreKind: input.dataStoreKind })
+        : commands.createElement(current, { kind: input.kind, name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, containerCategory: input.containerCategory, applicationKind: input.applicationKind, dataStoreKind: input.dataStoreKind, passthrough: input.passthrough })
       commit(() => created.project)
       return created.element
     },
@@ -346,6 +547,13 @@ export default function App() {
     deleteRelationship,
     arrangeView: (viewId) => runArrange(false, viewId ?? view.id),
     findings: () => allFindings(projectRef.current),
+    createDfd: (input) => { const current = projectRef.current; if (!input.scopeId || current.elements[input.scopeId]?.kind !== 'softwareSystem') return { error: 'scopeId must be a software system: DFDs live at container level' }; const created = commands.createDfd(current, 'dfd_container', input.scopeId, input.useCase); commit(() => created.project); return created.view },
+    addDfdNode: (input) => { const current = projectRef.current; if (!isDfdView(current.views[input.viewId]?.kind ?? 'c4_context')) return { error: 'Unknown DFD' }; const added = input.elementId ? commands.addBoundNode(current, input.viewId, input.elementId) : input.role && input.name ? commands.addFreeNode(current, input.viewId, { role: input.role, name: input.name, description: input.description, intermediateKind: input.intermediateKind }) : { project: current, node: undefined }; if (!added.node) return { error: 'Provide elementId, or role and name' }; commit(() => added.project); return added.node },
+    createDfdFlow: (input) => { const current = projectRef.current; const payload = dfdOf(current.views[input.viewId] ?? { kind: 'c4_context' } as DiagramView); const source = payload.nodes[input.sourceNodeId]; const target = payload.nodes[input.targetNodeId]; if (!source || !target) return { error: 'Unknown node' }; if (connectionVerdict(source, target).kind !== 'allowed') return { error: 'Flows join a process with data or an external entity; insert intermediate data or a process between two of a kind' }; const created = commands.createFlow(current, input.viewId, input); if (!created.flow) return { error: 'Could not create flow' }; commit(() => created.project); return created.flow },
+    createBoundary: (input) => { const created = commands.createBoundary(projectRef.current, input.viewId, input.name, input.flowIds, input.consistency); if (!created.boundary) return { error: 'Unknown DFD' }; commit(() => created.project); return created.boundary },
+    linkProcesses: (input) => { const current = projectRef.current; const payload = dfdOf(current.views[input.viewId] ?? { kind: 'c4_context' } as DiagramView); if (payload.nodes[input.sourceNodeId]?.role !== 'process' || payload.nodes[input.targetNodeId]?.role !== 'process') return { error: 'Both endpoints must be process nodes of the DFD' }; const linked = commands.linkProcesses(current, input.viewId, input.sourceNodeId, input.targetNodeId, input.kind ?? 'api_document', input.name ?? (input.kind === 'api_document' || !input.kind ? copy.apiDocumentName : copy.intermediateName)); if (!linked.node) return { error: 'Could not link' }; commit(() => linked.project); return { node: linked.node, group: linked.group } },
+    placeDfdNode: (input) => { const current = projectRef.current; const result = commands.placeNode(current, input.viewId, input.nodeId, { id: 'mcp', kind: input.kind, parentId: input.parentId, patch: {} }); if (!result.element) return { error: 'Node is missing or already bound' }; commit(() => result.project); return result.element },
+    importLinks: (input) => { let next = projectRef.current; let imported = 0; for (let guard = 0; guard < 100; guard += 1) { const link = importableLinks(next, next.views[input.viewId])[0]; if (!link) break; const result = commands.importLink(next, input.viewId, link); if (!result.node) break; next = result.project; imported += 1 } commit(() => next); return { imported } },
   }, setWebMcpReady), [commit, deleteElements, deleteRelationship, openScope, openView, patchElement, patchRelationship, projectRef, runArrange, view.id])
 
   const helperButton = (name: IconName, title: string, onClick: () => void, disabled = false) => (
@@ -400,7 +608,7 @@ export default function App() {
       </header>
 
       <main className="grid h-[calc(100vh-60px)] grid-cols-[232px_minmax(480px,1fr)_280px]">
-        <Explorer project={project} view={view} copy={copy} search={search} onSearch={setSearch} onOpenScope={openScope} onSelectElement={(id) => { const element = project.elements[id]; if (!element) return; const scopeKind: ViewKind = scopeViewKindFor(project, element); if (view.scopeId !== (element.parentId ?? null) || view.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null); setSelectedIds(new Set([id])) }} onQuickCreate={() => setQuickCreate(true)} notice={notice} />
+        <Explorer project={project} view={view} copy={copy} search={search} onSearch={setSearch} onOpenScope={openScope} onSelectElement={(id) => { const element = project.elements[id]; if (!element) return; const scopeKind: ViewKind = scopeViewKindFor(project, element); if (view.scopeId !== (element.parentId ?? null) || view.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null); setSelectedIds(new Set([id])) }} onQuickCreate={() => setQuickCreate(true)} onOpenView={openView} notice={notice} />
 
         <section className="flex min-w-0 flex-col bg-ink/35">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line/80 px-5 py-2">
@@ -409,7 +617,7 @@ export default function App() {
                 {crumbs.map((crumb, index) => (
                   <span key={`${crumb.kind}-${crumb.scopeId}`} className="flex items-center gap-1.5">
                     {index > 0 && <Icon name="chevron" size={11} />}
-                    <button type="button" className={`rounded px-1 hover:text-cyan ${index === crumbs.length - 1 ? 'text-base-content' : ''}`} onClick={() => openScope(crumb.kind, crumb.scopeId)}>{crumb.label}</button>
+                    <button type="button" className={`rounded px-1 hover:text-cyan ${index === crumbs.length - 1 ? 'text-base-content' : ''}`} onClick={() => (crumb.viewId ? openView(crumb.viewId) : openScope(crumb.kind, crumb.scopeId))}>{crumb.label}</button>
                   </span>
                 ))}
               </div>
@@ -419,10 +627,20 @@ export default function App() {
                     {sibling.isDefault && <Icon name="star" size={10} />}{sibling.name || copy.viewKinds[sibling.kind]}
                   </button>
                 ))}
-                <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-white/5 hover:text-cyan" title={copy.newView} onClick={() => { const created = commands.createView(projectRef.current, view.kind, view.scopeId, `View ${siblingViews.length + 1}`); commit(() => withInitialLayout(created.project, created.view.id)); openView(created.view.id) }}><Icon name="plus" size={13} /></button>
+                {!isDfd && <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-white/5 hover:text-cyan" title={copy.newView} onClick={() => { const created = commands.createView(projectRef.current, view.kind, view.scopeId, `View ${siblingViews.length + 1}`); commit(() => withInitialLayout(created.project, created.view.id)); openView(created.view.id) }}><Icon name="plus" size={13} /></button>}
+                {(dfdKind || dfdSiblings.length > 0) && (
+                  <span className="ml-2 flex items-center gap-1 border-l border-line/80 pl-2">
+                    {dfdSiblings.map((sibling) => (
+                      <button key={sibling.id} type="button" onClick={() => openView(sibling.id)} className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs ${sibling.id === view.id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:bg-white/5'}`} title={copy.viewKinds[sibling.kind]}>
+                        <Icon name="flow" size={11} />{dfdLabel(copy, sibling)}
+                      </button>
+                    ))}
+                    {dfdKind && <button type="button" className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted hover:bg-white/5 hover:text-cyan" title={copy.newDfd} onClick={newDfd}><Icon name="plus" size={12} /><Icon name="flow" size={12} /></button>}
+                  </span>
+                )}
                 <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-white/5 hover:text-cyan" title={copy.duplicateView} onClick={() => { const created = commands.createView(projectRef.current, view.kind, view.scopeId, `${view.name || copy.viewKinds[view.kind]} copy`, view); commit(() => created.project); openView(created.view.id) }}><Icon name="copy" size={13} /></button>
                 {!view.isDefault && <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-white/5 hover:text-cyan" title={copy.setDefault} onClick={() => commit((current) => commands.setDefaultView(current, view.id))}><Icon name="star" size={13} /></button>}
-                {siblingViews.length > 1 && <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-rose-500/10 hover:text-rose-400" title={copy.deleteView} onClick={() => { const next = commands.deleteView(projectRef.current, view.id); commit(() => next); setCurrentViewId(null) }}><Icon name="trash" size={13} /></button>}
+                {(isDfd || siblingViews.length > 1) && <button type="button" className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-rose-500/10 hover:text-rose-400" title={copy.deleteView} onClick={() => { if (!window.confirm(copy.deleteView + '?')) return; const next = commands.deleteView(projectRef.current, view.id); commit(() => next); if (isDfd) openScope(pairedC4Kind(view.kind), view.scopeId); else setCurrentViewId(null) }}><Icon name="trash" size={13} /></button>}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -472,7 +690,7 @@ export default function App() {
             </div>
           </div>
           <div className="relative flex min-h-0 flex-1 flex-col p-4">
-            {quickCreate && <QuickCreate view={view} groups={scopeGroups} copy={copy} onCreate={createFromQuick} onClose={() => setQuickCreate(false)} />}
+            {quickCreate && <QuickCreate view={view} scope={view.scopeId ? project.elements[view.scopeId] : undefined} groups={scopeGroups} copy={copy} onCreate={createFromQuick} onClose={() => setQuickCreate(false)} />}
             <Canvas
               model={model}
               zoom={zoom}
@@ -485,9 +703,12 @@ export default function App() {
               onCommitBoundary={(boundary) => commit((current) => commands.setBoundary(current, view.id, boundary))}
               onConnect={connect}
               onBackgroundDoubleClick={() => setQuickCreate(true)}
+              onDropElement={isDfd ? dropElement : undefined}
+              pendingIntermediate={pendingIntermediate}
+              onChooseIntermediate={chooseIntermediate}
             />
             <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
-              <div className="flex items-center gap-4"><span>{copy.doubleClickToEnter}</span><span>{copy.dragToMove}</span></div>
+              <div className="flex items-center gap-4"><span>{copy.doubleClickToEnter}</span><span>{copy.dragToMove}</span>{isDfd && <span>{copy.dropHint}</span>}</div>
               <span>{copy.viewKinds[view.kind]} · {model.nodes.length} / {model.edges.length}</span>
             </div>
           </div>
@@ -514,6 +735,9 @@ export default function App() {
           onDeleteGroup={(id) => commit((current) => commands.deleteGroup(current, id))}
           onCopyLink={copyLink}
           onSelect={(id) => setSelectedIds(new Set([id]))}
+          onOpenView={openView}
+          onMaterialize={materialize}
+          dfd={isDfd ? dfdActions : undefined}
         />
       </main>
     </div>

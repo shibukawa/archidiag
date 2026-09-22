@@ -21,8 +21,30 @@ export function buildDrawioXml(model: RenderModel): string {
     const r = group.rect
     cells.push(`<mxCell id="group-${attr(group.id)}" value="${attr(group.group.name)}" style="rounded=1;dashed=1;dashPattern=4 3;whiteSpace=wrap;html=1;strokeColor=${theme.group.stroke};fillColor=none;fontColor=${theme.group.text};verticalAlign=top;align=left;spacingLeft=8;fontSize=10;fontStyle=1;" vertex="1" parent="${parent}"><mxGeometry x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" as="geometry"/></mxCell>`)
   })
+  model.processGroups.forEach((group) => {
+    const r = group.rect
+    const token = theme.tokens.dfdProcess
+    cells.push(`<mxCell id="pgroup-${attr(group.id)}" value="&lt;b&gt;${attr(group.number)} ${attr(group.name)}&lt;/b&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;strokeWidth=2;strokeColor=${token.stroke};fillColor=${token.fill};opacity=12;fontColor=${token.stroke};verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=11;" vertex="1" parent="${parent}"><mxGeometry x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" as="geometry"/></mxCell>`)
+  })
+  model.regions.forEach((region) => {
+    const r = region.rect
+    const atomic = region.boundary.consistency === 'atomic'
+    cells.push(`<mxCell id="region-${attr(region.id)}" value="&lt;b&gt;${attr(region.boundary.name)}&lt;/b&gt; · ${attr(labels.dfd.consistency[region.boundary.consistency])}" style="rounded=1;dashed=1;dashPattern=${atomic ? '7 4' : '3 4'};whiteSpace=wrap;html=1;strokeColor=${atomic ? '#2563eb' : '#d97706'};fillColor=none;fontColor=${atomic ? '#1d4ed8' : '#b45309'};verticalAlign=top;align=left;spacingLeft=8;fontSize=10;" vertex="1" parent="${parent}"><mxGeometry x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" as="geometry"/></mxCell>`)
+  })
   model.nodes.forEach((node) => {
     const r = node.rect
+    if (node.dfd) {
+      // DFD node: draw.io's own process, note, step, and cylinder shapes stand in for the Gane-Sarson pictures.
+      const info = node.dfd
+      const shape = info.node.role === 'start' ? 'ellipse;' : info.node.role === 'process' ? 'shape=process;size=0.06;' : info.node.role === 'diagram_ref' ? 'shape=step;perimeter=stepPerimeter;size=0.12;' : node.token.shape === 'cylinder' ? 'shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=10;' : node.token.shape === 'horizontal_cylinder' ? 'shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=10;rotation=90;' : node.token.shape === 'folded_rect' ? 'shape=note;size=14;' : node.token.shape === 'open_rect' ? 'shape=partialRectangle;right=0;' : 'rounded=0;'
+      const kind = info.node.elementId ? labels.kind(node.element, false) : info.node.role === 'intermediate_data' ? labels.dfd.intermediate[info.node.intermediateKind ?? 'file'] : labels.dfd.roles[info.node.role]
+      const number = info.number ?? info.node.processNumber ? `${attr(info.number ?? info.node.processNumber ?? '')} · ` : ''
+      const caption = info.node.role === 'diagram_ref' ? (info.refTarget ? labels.dfd.refTo(info.refTarget) : labels.dfd.missingRef) : kind
+      const description = model.view.displayMode === 'descriptive' && node.element.description ? `&lt;div style=&quot;text-align:left;margin:4px 10px 0&quot;&gt;&lt;font style=&quot;font-size:9px&quot;&gt;${attr(node.element.description)}&lt;/font&gt;&lt;/div&gt;` : ''
+      const value = `&lt;b&gt;${number}${attr(info.name)}&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;${attr(caption)}&lt;/font&gt;${description}`
+      cells.push(`<mxCell id="${attr(node.id)}" value="${value}" style="${shape}whiteSpace=wrap;html=1;${info.free ? 'dashed=1;' : ''}strokeColor=${node.token.stroke};fillColor=${node.token.fill};fontColor=${node.token.text};" vertex="1" parent="${parent}"><mxGeometry x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" as="geometry"/></mxCell>`)
+      return
+    }
     if (node.token.shape === 'card') {
       // Entity card: header line plus the same rows the canvas draws for the view's display mode.
       const attributes = node.element.attributes ?? []
@@ -45,9 +67,11 @@ export function buildDrawioXml(model: RenderModel): string {
   model.edges.forEach((edge) => {
     const erd = edge.relationship.erd
     const labelText = edge.relationship.label.split('\n').map((line) => attr(line)).join('&lt;br&gt;')
+    const payload = edge.payload ? `&lt;br&gt;&lt;i&gt;⟨${attr(edge.payload)}⟩&lt;/i&gt;` : ''
+    const operations = edge.flow?.operations.length && edge.storeEnd ? `&lt;br&gt;&lt;b&gt;${attr(edge.flow.operations.join(''))}&lt;/b&gt;` : ''
     const label = erd
       ? (erd.kind === 'label' ? labelText : `${labelText}&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;${attr(erd.sourceCardinality)} → ${attr(erd.targetCardinality)}&lt;/font&gt;`)
-      : edge.relationship.technology ? `${labelText}&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;[${attr(edge.relationship.technology)}]&lt;/font&gt;` : labelText
+      : `${labelText}${payload}${operations}${edge.relationship.technology ? `&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;[${attr(edge.relationship.technology)}]&lt;/font&gt;` : ''}`
     const erdStyle = erd ? ({ reference: 'endArrow=open;endFill=0;', inherit: 'endArrow=block;endFill=0;endSize=10;', dependent: 'endArrow=diamondThin;endFill=1;endSize=12;', label: 'endArrow=none;dashed=1;' } as const)[erd.kind] : ''
     const dashed = erd ? erdStyle : edge.relationship.projected ? 'endFill=0;' : ''
     const points = edge.route.points.slice(1, -1).map((point) => `<mxPoint x="${point.x}" y="${point.y}"/>`).join('')

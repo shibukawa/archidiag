@@ -14,8 +14,8 @@ example:
   context: Customer -> Commerce Platform
   container: Customer -> Web Application
 merging:
-  one_line_per_pair: several relationships between the same two visible nodes in the same direction draw as one line; their labels stack one per line and technologies join with a slash
-  selection: clicking the line selects the first relationship; the inspector lists the others folded into it
+  one_line_per_pair: several relationships between the same two visible nodes in the same direction draw as one line, whether stored or derived from DFD flows (decision:dfd-drives-c4); their labels stack one per line and technologies join with a slash
+  selection: clicking the line selects the first member; the inspector lists the others folded into it, derived flows with their DFD and use case
   opposite_directions: two lines, one per direction
 boundary:
   pending: a relationship whose endpoint is the scope element itself is not drawn, but its other end stays in the view and is placed left when it sends and right when it receives, so nothing from the parent view disappears

@@ -5,7 +5,7 @@ export type IconName =
   | 'link' | 'database' | 'box' | 'user' | 'globe' | 'layers' | 'trash' | 'external' | 'grid' | 'zoomIn' | 'zoomOut'
   | 'alignLeft' | 'alignCenterX' | 'alignRight' | 'alignTop' | 'alignCenterY' | 'alignBottom' | 'distributeX' | 'distributeY'
   | 'row' | 'column' | 'wand' | 'group' | 'eye' | 'copy' | 'star' | 'x' | 'warning' | 'info' | 'error' | 'tag' | 'shrink' | 'expand'
-  | 'table' | 'key' | 'arrowUp' | 'arrowDown' | 'bubbles'
+  | 'table' | 'key' | 'arrowUp' | 'arrowDown' | 'bubbles' | 'flow' | 'unlink' | 'topic' | 'play'
 
 export function Icon({ name, size = 16, stroke = 1.8, className }: { name: IconName; size?: number; stroke?: number; className?: string }) {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: stroke, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, className }
@@ -58,6 +58,10 @@ export function Icon({ name, size = 16, stroke = 1.8, className }: { name: IconN
     arrowUp: <path d="M12 19V5M5 12l7-7 7 7" />,
     arrowDown: <path d="M12 5v14M5 12l7 7 7-7" />,
     bubbles: <><circle cx="9" cy="10" r="6" /><circle cx="17.5" cy="7" r="2.5" /><circle cx="16.5" cy="16.5" r="3.5" /></>,
+    flow: <><rect x="3" y="4" width="6" height="6" rx="1" /><rect x="15" y="14" width="6" height="6" rx="1" /><path d="M9 7h4a2 2 0 0 1 2 2v5" /><path d="m13 12 2 2 2-2" /></>,
+    topic: <><rect x="3" y="7" width="18" height="10" rx="5" /><path d="M16 7v10" /></>,
+    play: <><circle cx="12" cy="12" r="9" /><path d="m10 8 5 4-5 4z" /></>,
+    unlink: <><path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15" /><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15" /><path d="m4 4 16 16" /></>,
   }
   return <svg {...common}>{paths[name]}</svg>
 }

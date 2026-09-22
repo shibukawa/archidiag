@@ -1,4 +1,4 @@
-import { cardRows, type DisplayMode, type Element, type Position, type Project, type Rect } from './model'
+import { cardRows, type DfdRole, type DisplayMode, type Element, type Position, type Project, type Rect } from './model'
 
 export const NODE_WIDTH = 220
 export const NODE_HEIGHTS: Record<DisplayMode, number> = { compact: 76, technology_only: 92, descriptive: 124, fields: 76 }
@@ -65,12 +65,23 @@ export function cardWidthFor(element: Element, mode: DisplayMode, project?: Proj
 
 /** Uniform size for C4 elements; entity cards grow with their content. The project supplies reference rows. */
 export function nodeSizeFor(element: Element, mode: DisplayMode, project?: Project) {
+  if (element.kind === 'topic' || element.kind === 'folder') return { width: NODE_WIDTH, height: mode === 'descriptive' ? 96 : 68 }
   if (element.kind !== 'entity') return nodeSize(mode)
   const width = cardWidthFor(element, mode, project)
   if (mode !== 'fields') return { width, height: NODE_HEIGHTS[mode] }
   const { shown, references, hidden } = cardRows(element, project)
   const rows = shown.length + references.length + (hidden > 0 || shown.length === 0 ? 1 : 0)
   return { width, height: Math.max(NODE_HEIGHTS.compact, CARD_HEADER + CARD_PADDING + rows * CARD_ROW + CARD_PADDING) }
+}
+
+/** DFD node footprints: processes match C4 boxes; stores, files, queues, and references are shorter (term: dfd-notation). */
+export function dfdNodeSize(role: DfdRole, mode: DisplayMode) {
+  if (role === 'start') return { width: 56, height: 56 }
+  if (role === 'process') return { width: NODE_WIDTH, height: mode === 'descriptive' ? 124 : 84 }
+  if (role === 'external_entity') return { width: 180, height: mode === 'descriptive' ? 96 : 68 }
+  if (role === 'data_store') return { width: NODE_WIDTH, height: mode === 'descriptive' ? 92 : 68 }
+  if (role === 'intermediate_data') return { width: 180, height: 60 }
+  return { width: 180, height: 52 }
 }
 
 export function overlaps(a: Rect, b: Rect, margin = 0) {
@@ -233,6 +244,8 @@ export interface LayeredInput {
   nodes: Array<{ id: string; width: number; height: number; role: 'source' | 'internal' | 'sink' }>
   edges: LayoutEdge[]
   spacing?: { x: number; y: number }
+  /** Pull internal nodes without predecessors (a table only read) to the layer just before their first successor. */
+  compactSources?: boolean
 }
 
 /** Deterministic layered layout, left to right. External sources land in the first column, external sinks in the last. */
@@ -262,6 +275,13 @@ export function layeredLayout(input: LayeredInput): Record<string, Position> {
     return value
   }
   ids.forEach((id) => depth(id))
+  if (input.compactSources) {
+    // A node nobody feeds sits right before what it feeds, not at the far left (requirement: dfd-flow-direction).
+    input.nodes.filter((node) => node.role === 'internal' && !(predecessors.get(node.id) ?? []).length && (successors.get(node.id) ?? []).length).forEach((node) => {
+      const next = Math.min(...successors.get(node.id)!.map((id) => layer.get(id) ?? 0))
+      layer.set(node.id, Math.max(0, next - 1))
+    })
+  }
   // External sources occupy column 0; internal nodes keep their relative depth after it; sinks follow the deepest internal node.
   const hasSources = input.nodes.some((node) => node.role === 'source')
   const internalNodes = input.nodes.filter((node) => node.role === 'internal')

@@ -1,8 +1,10 @@
 // Runtime-neutral project model. No DOM, React, or Bun APIs here.
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
-export type ElementKind = 'person' | 'softwareSystem' | 'externalSystem' | 'container' | 'component' | 'entity'
+export type ElementKind = 'person' | 'softwareSystem' | 'externalSystem' | 'container' | 'component' | 'entity' | 'topic' | 'folder'
+/** Store items: the component-level children of non-SQL data stores (data:store-item). */
+export type StoreItemKind = 'topic' | 'folder'
 export type ContainerCategory = 'application' | 'dataStore'
 export type DataStoreKind = 'database' | 'databaseSchema' | 'pubSub' | 'queue' | 'bucket' | 'cache' | 'fileShare' | 'other'
 export const DATA_STORE_KINDS: DataStoreKind[] = ['database', 'databaseSchema', 'pubSub', 'queue', 'bucket', 'cache', 'fileShare', 'other']
@@ -12,7 +14,7 @@ export type SqlDialect = 'postgresql' | 'sqlite' | 'mysql'
 export type ApplicationKind = 'webBrowser' | 'mobileApp' | 'desktopApp' | 'server' | 'worker' | 'other'
 export const APPLICATION_KINDS: ApplicationKind[] = ['webBrowser', 'mobileApp', 'desktopApp', 'server', 'worker', 'other']
 export type C4Level = 'context' | 'container' | 'component'
-export type ViewKind = 'c4_context' | 'c4_container' | 'c4_component' | 'erd_component' | 'erd_code'
+export type ViewKind = 'c4_context' | 'c4_container' | 'c4_component' | 'erd_component' | 'erd_code' | 'dfd_container'
 /** fields is an erd_* mode: the card lists its important attributes instead of the description. */
 export type DisplayMode = 'compact' | 'descriptive' | 'technology_only' | 'fields'
 export type ThemeId = 'compact' | 'classic_c4' | 'monochrome'
@@ -117,6 +119,10 @@ export interface Element {
   applicationKind?: ApplicationKind
   dataStoreKind?: DataStoreKind
   sqlDialect?: SqlDialect
+  /** Components only: routes, validates, or adapts without transforming; binds to the API document it handles in a DFD (decision: dfd-passthrough-components). */
+  passthrough?: boolean
+  /** Containers only: the system's "Unknown container", created on demand for components placed from a DFD (decision: dfd-drives-c4). */
+  placeholder?: boolean
   /** Entities only. */
   classification?: EntityClassification
   storageKind?: EntityStorage
@@ -143,6 +149,8 @@ export interface Relationship {
   viewEndpoints?: Partial<Record<C4Level, { sourceId: string; targetId: string }>>
   /** Set when both endpoints are entities of one data store. */
   erd?: ErdRelationship
+  /** Computed from DFD flows, never stored (decision: dfd-drives-c4). */
+  derived?: { members: Array<{ viewId: string; flowId: string }> }
 }
 
 export interface Group {
@@ -154,9 +162,95 @@ export interface Group {
   color?: string
 }
 
+// ---------- DFD (data:dfd-model) ----------
+
+/** Gane-Sarson node roles (term:dfd-notation). */
+export type DfdRole = 'start' | 'external_entity' | 'process' | 'data_store' | 'intermediate_data' | 'diagram_ref'
+export const DFD_ROLES: DfdRole[] = ['start', 'external_entity', 'process', 'data_store', 'intermediate_data', 'diagram_ref']
+/** api_document: payload of a synchronous call, the default between two processes; file: a handed-over file; queue: asynchronous events. */
+export type IntermediateKind = 'api_document' | 'file' | 'queue'
+export const INTERMEDIATE_KINDS: IntermediateKind[] = ['api_document', 'file', 'queue']
+export type CrudOperation = 'C' | 'R' | 'U' | 'D'
+export const CRUD_OPERATIONS: CrudOperation[] = ['C', 'R', 'U', 'D']
+export type Consistency = 'atomic' | 'eventual'
+
+/**
+ * One node of a DFD. A bound node projects a canonical element (elementId) and takes its name; a free node
+ * was created in the DFD first and carries its own name until it is placed into C4 or an ERD, or bound to an
+ * existing element (decision: dfd-first-free-nodes).
+ */
+export interface DfdNode {
+  id: string
+  role: DfdRole
+  elementId?: string
+  name: string
+  description: string
+  technology: string
+  /** intermediate_data only. */
+  intermediateKind?: IntermediateKind
+  /** Processes only: 1, 2, 2.1; assigned once and never renumbered. */
+  processNumber?: string
+  /** diagram_ref only: the DFD this off-page connector continues in. */
+  targetViewId?: string
+}
+
+export interface DfdFlow {
+  id: string
+  sourceNodeId: string
+  targetNodeId: string
+  label: string
+  description: string
+  technology: string
+  /** Entity ids or free text naming the data that moves. */
+  dataRefs: string[]
+  /** CRUD at the data store end; allowed only when one endpoint is a data store. */
+  operations: CrudOperation[]
+  /** The C4 relationship this flow was imported from; the two draw as one line member (requirement: c4-links-into-dfd). */
+  relationshipRef?: string
+}
+
+/** Flows that succeed or fail together (data:dfd-transaction-boundary). */
+export interface DfdBoundary {
+  id: string
+  name: string
+  description: string
+  consistency: Consistency
+  flowIds: string[]
+}
+
+/**
+ * A logical process group: directly connected processes and the intermediate data between them, spoken for by a
+ * representative member (UI, else batch, else the most upstream server). Groups nest and are the DFD's levels
+ * (decision: dfd-logical-process-group).
+ */
+export interface DfdGroup {
+  id: string
+  /** Empty means the representative's name. */
+  name: string
+  description: string
+  /** Node ids (processes and the intermediate data between them) and nested group ids. */
+  memberIds: string[]
+  /** Number at the group's own level, assigned once; members are numbered beneath it at render time. */
+  processNumber: string
+}
+
+export interface DfdPayload {
+  nodes: Record<string, DfdNode>
+  flows: Record<string, DfdFlow>
+  boundaries: Record<string, DfdBoundary>
+  groups: Record<string, DfdGroup>
+  nextNumber: number
+}
+
+export function emptyDfdPayload(): DfdPayload {
+  return { nodes: {}, flows: {}, boundaries: {}, groups: {}, nextNumber: 1 }
+}
+
 export interface ViewLayout {
   positions: Record<string, Position>
   boundary?: Rect
+  /** DFD views: process groups drawn as one process instead of their members. */
+  collapsedGroupIds?: string[]
 }
 
 export interface DiagramView {
@@ -170,6 +264,10 @@ export interface DiagramView {
   elementRefs: string[]
   displayMode: DisplayMode
   layout: ViewLayout
+  /** dfd_* views: the scenario the diagram follows, for example "Place order". */
+  useCase?: string
+  /** dfd_* views: nodes, flows, and transaction boundaries; positions in layout are keyed by node id. */
+  dfd?: DfdPayload
 }
 
 export interface ProjectSettings {
@@ -203,15 +301,30 @@ export const LEVEL_BY_VIEW_KIND: Record<ViewKind, C4Level> = {
   c4_component: 'component',
   erd_component: 'component',
   erd_code: 'component',
+  dfd_container: 'container',
 }
 
 export function isErdView(kind: ViewKind) {
   return kind === 'erd_component' || kind === 'erd_code'
 }
 
+export function isDfdView(kind: ViewKind) {
+  return kind === 'dfd_container'
+}
+
+/** DFDs live at container level only: a software system owns them beside its Container views (decision: dfd-container-level-only). */
+export function pairedDfdKind(kind: ViewKind): ViewKind | undefined {
+  return kind === 'c4_container' || kind === 'dfd_container' ? 'dfd_container' : undefined
+}
+export function pairedC4Kind(kind: ViewKind): ViewKind {
+  return VIEW_KIND_BY_LEVEL[LEVEL_BY_VIEW_KIND[kind]]
+}
+
 /** Display modes the toolbar offers for a view kind; erd views trade technology for the field list. */
 export function displayModesFor(kind: ViewKind): DisplayMode[] {
-  return isErdView(kind) ? ['descriptive', 'fields', 'compact'] : ['descriptive', 'compact', 'technology_only']
+  if (isErdView(kind)) return ['descriptive', 'fields', 'compact']
+  if (isDfdView(kind)) return ['descriptive', 'compact']
+  return ['descriptive', 'compact', 'technology_only']
 }
 
 export function childKindForLevel(level: C4Level): ElementKind {
@@ -220,10 +333,15 @@ export function childKindForLevel(level: C4Level): ElementKind {
   return 'component'
 }
 
-/** The element kind that quick create adds inside a view of this kind. */
-export function childKindForView(kind: ViewKind): ElementKind {
-  if (isErdView(kind)) return 'entity'
+/** The element kind that quick create adds inside a view of this kind; an item store's list adds topics or folders. */
+export function childKindForView(kind: ViewKind, scope?: Element): ElementKind {
+  if (isErdView(kind)) return itemKindFor(scope) ?? 'entity'
   return childKindForLevel(LEVEL_BY_VIEW_KIND[kind])
+}
+
+/** Only a software system owns DFDs (decision: dfd-container-level-only). */
+export function dfdKindForScope(element: Element | undefined): ViewKind | undefined {
+  return element?.kind === 'softwareSystem' ? 'dfd_container' : undefined
 }
 
 /** True for database and database schema containers, the only elements that own entities. */
@@ -231,11 +349,41 @@ export function isErdStore(element: Element | undefined): boolean {
   return Boolean(element && element.kind === 'container' && effectiveCategory(element) === 'dataStore' && element.dataStoreKind && SQL_STORE_KINDS.includes(element.dataStoreKind))
 }
 
+/** The item kind a non-SQL data store owns: topics for pub/sub and queues, folders for buckets and file shares (data:store-item). */
+export function itemKindFor(element: Element | undefined): StoreItemKind | undefined {
+  if (!element || element.kind !== 'container' || effectiveCategory(element) !== 'dataStore') return undefined
+  if (element.dataStoreKind === 'pubSub' || element.dataStoreKind === 'queue') return 'topic'
+  if (element.dataStoreKind === 'bucket' || element.dataStoreKind === 'fileShare') return 'folder'
+  return undefined
+}
+
+export function isItemStore(element: Element | undefined): boolean {
+  return Boolean(itemKindFor(element))
+}
+
+export function isStoreItem(element: Element | undefined): boolean {
+  return element?.kind === 'topic' || element?.kind === 'folder'
+}
+
+/** True for components of a screen container (web browser, mobile app, desktop app). */
+export function isScreenComponent(project: Project, element: Element | undefined): boolean {
+  const parent = element?.kind === 'component' && element.parentId ? project.elements[element.parentId] : undefined
+  return Boolean(parent && parent.kind === 'container' && ['webBrowser', 'mobileApp', 'desktopApp'].includes(parent.applicationKind ?? ''))
+}
+
+/** True for components of a worker container: batch jobs. */
+export function isJobComponent(project: Project, element: Element | undefined): boolean {
+  const parent = element?.kind === 'component' && element.parentId ? project.elements[element.parentId] : undefined
+  return Boolean(parent && parent.kind === 'container' && parent.applicationKind === 'worker')
+}
+
 /** The view kind that opens when zooming into an element, or undefined when it has no child scope. */
 export function childViewKind(element: Element): ViewKind | undefined {
   if (element.kind === 'softwareSystem') return 'c4_container'
   if (element.kind === 'container' && effectiveCategory(element) === 'application') return 'c4_component'
   if (isErdStore(element)) return 'erd_component'
+  // A pub/sub, queue, bucket, or file share opens its item list, drawn with the same card view.
+  if (isItemStore(element)) return 'erd_component'
   // An entity opens its code ERD: itself plus its dependent entities (data:erd-model).
   if (element.kind === 'entity') return 'erd_code'
   return undefined

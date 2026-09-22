@@ -15,7 +15,7 @@ triggers:
 per_kind:
   c4_*: layered left-to-right; context elements that only send are placed left of the boundary and those that only receive right of it, so a child view lines up with its parent; in component views sibling containers sit between the container and system boundaries and root elements outside the system boundary; groups laid out as compound nodes
   erd_*: entities layered by reference direction; dependent entities beside their owner; attribute card height respected
-  dfd_*: source external entities on the left, sink external entities on the right, processes in the middle layers, stores right of or below the processes that use them; intermediate data between the processes it connects; transaction boundary regions recomputed from members
+  dfd_*: a topological sort of the forward flows from the start marker; nodes nobody feeds (a table only read) sit just before what they feed, sink external entities on the far right, tables written right of their writers, intermediate data between the processes it connects, expanded process groups as compound nodes laid out inside first, return flows as lanes below (requirement:dfd-flow-direction); transaction boundary regions recomputed from members
 acceptance:
   - arrange a whole view or only selected nodes with one action; the result is one undoable layout operation
   - left-to-right is the default; C4 and ERD may also choose top-down, and their ports follow node positions (rule:edge-routing); DFD keeps left-to-right with side ports

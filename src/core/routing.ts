@@ -12,6 +12,8 @@ export interface Route {
   id: string
   points: Position[]
   labelAt: Position
+  /** sides mode: the target sits left of the source, so the line runs back below the main lane (a response). */
+  returnLane?: boolean
 }
 
 /** sides: leave the source's right, enter the target's left (DFD rule). free: nearest sides, any of the four (C4, ERD). */
@@ -60,19 +62,22 @@ export function routeEdges(edges: RouteInput[], mode: PortMode = 'free'): Route[
     const start = port(edge.source, sides.source, edge.sourceId, edge, edge.target)
     const end = port(edge.target, sides.target, edge.targetId, edge, edge.source)
     let points: Position[]
+    let returnLane = false
     if (sides.source === 'right' && sides.target === 'left') {
       const forward = end.x - start.x >= PORT_GAP * 2
       if (forward) {
         const midX = Math.round(start.x + (end.x - start.x) / 2)
         points = Math.abs(start.y - end.y) < 1 ? [start, end] : [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end]
       } else {
-        // Back edge (sides mode only): step out right, travel above or below both boxes, come in from the left.
+        // Return lane (sides mode only): a reverse S. Step out right, cross back through the vertical gap between the two
+        // boxes when there is one, and come in from the left; only boxes on the same row force the lane below both.
         const outX = start.x + PORT_GAP
         const inX = end.x - PORT_GAP
-        const above = Math.min(edge.source.y, edge.target.y) - LANE_GAP
-        const below = Math.max(edge.source.y + edge.source.height, edge.target.y + edge.target.height) + LANE_GAP
-        const laneY = above > 8 ? above : below
+        const gapTop = Math.min(edge.source.y + edge.source.height, edge.target.y + edge.target.height)
+        const gapBottom = Math.max(edge.source.y, edge.target.y)
+        const laneY = gapBottom - gapTop > LANE_GAP ? Math.round((gapTop + gapBottom) / 2) : Math.max(edge.source.y + edge.source.height, edge.target.y + edge.target.height) + LANE_GAP
         points = [start, { x: outX, y: start.y }, { x: outX, y: laneY }, { x: inX, y: laneY }, { x: inX, y: end.y }, end]
+        returnLane = true
       }
     } else if (sides.source === 'left' && sides.target === 'right') {
       const midX = Math.round(start.x + (end.x - start.x) / 2)
@@ -81,7 +86,7 @@ export function routeEdges(edges: RouteInput[], mode: PortMode = 'free'): Route[
       const midY = Math.round(start.y + (end.y - start.y) / 2)
       points = Math.abs(start.x - end.x) < 1 ? [start, end] : [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end]
     }
-    return { id: edge.id, points, labelAt: labelPoint(points) }
+    return { id: edge.id, points, labelAt: labelPoint(points), returnLane }
   })
   return routes
     .map((route, index, all) => ({ ...route, points: separateChannels(route.points, index, all) }))

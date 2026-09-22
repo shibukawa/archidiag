@@ -1,7 +1,9 @@
+import { allRelationships } from './dfd'
 import {
   ancestorIds,
   childrenOf,
   childViewKind,
+  isDfdView,
   LEVEL_BY_VIEW_KIND,
   makeId,
   type DiagramView,
@@ -47,6 +49,7 @@ export function ensureDefaultView(project: Project, kind: ViewKind, scopeId: str
 
 /** Elements that belong to the view's scope (children), filtered by elementRefs when set. */
 export function scopeElements(project: Project, view: DiagramView): Element[] {
+  if (isDfdView(view.kind)) return []
   const children = childrenOf(project, view.scopeId)
   if (!view.elementRefs.length) return children
   const allowed = new Set(view.elementRefs)
@@ -80,6 +83,8 @@ function descendantsOf(project: Project, ids: Iterable<string>): Set<string> {
  * elements whose relationship stops at the owning system when the view shows every container.
  */
 export function visibleElements(project: Project, view: DiagramView): VisibleElements {
+  // DFD views draw their own nodes (data:dfd-model), never the scope's children directly.
+  if (isDfdView(view.kind)) return { internal: [], siblings: [], external: [] }
   const internal = scopeElements(project, view)
   // ERD views show the data store's entities only; readers and writers of the store are a DFD concern.
   if (view.kind === 'c4_context' || view.kind === 'erd_component') return { internal, siblings: [], external: [] }
@@ -99,7 +104,8 @@ export function visibleElements(project: Project, view: DiagramView): VisibleEle
   const internalReach = descendantsOf(project, internalIds)
   internalIds.forEach((id) => internalReach.add(id))
   const level = LEVEL_BY_VIEW_KIND[view.kind]
-  const relationships = Object.values(project.relationships)
+  // Stored relationships plus those derived from DFD flows (decision: dfd-drives-c4).
+  const relationships = Object.values(allRelationships(project))
   const reaches = (candidateIds: Set<string>, allowOwner: boolean) => relationships.some((relationship) => {
     const endpoints = endpointsFor(relationship, level)
     const sourceId = endpoints?.sourceId ?? relationship.sourceId
@@ -112,13 +118,27 @@ export function visibleElements(project: Project, view: DiagramView): VisibleEle
     return allowOwner && mine === view.scopeId
   })
   const scope = view.scopeId ? project.elements[view.scopeId] : undefined
-  const siblings = view.kind === 'c4_component' && scope?.parentId
-    ? childrenOf(project, scope.parentId).filter((element) => element.id !== scope.id).filter((element) => {
-      const ids = descendantsOf(project, [element.id])
-      ids.add(element.id)
-      return reaches(ids, true)
+  // Component views: a relationship that names a component of a sibling container brings that component in as external
+  // context (drawn under its container's name); one that stops at the container brings the container (decision: dfd-drives-c4).
+  const siblings: Element[] = []
+  if (view.kind === 'c4_component' && scope?.parentId) {
+    childrenOf(project, scope.parentId).filter((element) => element.id !== scope.id).forEach((container) => {
+      const components = childrenOf(project, container.id).filter((component) => component.kind === 'component' && reaches(new Set([component.id]), true))
+      siblings.push(...components)
+      const ids = descendantsOf(project, [container.id])
+      ids.add(container.id)
+      const componentIds = new Set(components.map((component) => component.id))
+      const containerOnly = relationships.some((relationship) => {
+        const endpoints = endpointsFor(relationship, level)
+        const sourceId = endpoints?.sourceId ?? relationship.sourceId
+        const targetId = endpoints?.targetId ?? relationship.targetId
+        const mine = ids.has(sourceId) ? { end: sourceId, other: targetId } : ids.has(targetId) ? { end: targetId, other: sourceId } : undefined
+        if (!mine || componentIds.has(mine.end)) return false
+        return internalReach.has(mine.other) || mine.other === view.scopeId
+      })
+      if (containerOnly) siblings.push(container)
     })
-    : []
+  }
   const external = Object.values(project.elements).filter((element) => {
     if (element.parentId || ownerIds.has(element.id)) return false
     const ids = descendantsOf(project, [element.id])
@@ -152,7 +172,7 @@ export function projectRelationships(project: Project, view: DiagramView, visibl
   const withScope = new Set(ids)
   if (view.scopeId) withScope.add(view.scopeId)
   const level = LEVEL_BY_VIEW_KIND[view.kind]
-  const projected = Object.values(project.relationships).flatMap((relationship) => {
+  const projected = Object.values(allRelationships(project)).flatMap((relationship) => {
     const endpoints = endpointsFor(relationship, level)
     const sourceId = endpoints?.sourceId ?? relationship.sourceId
     const targetId = endpoints?.targetId ?? relationship.targetId
@@ -205,9 +225,10 @@ export function projectRelationships(project: Project, view: DiagramView, visibl
   })
 }
 
-export interface Crumb { label: string; kind: ViewKind; scopeId: string | null }
+export interface Crumb { label: string; kind: ViewKind; scopeId: string | null; viewId?: string }
 
-export function breadcrumb(project: Project, view: DiagramView, rootLabel: string): Crumb[] {
+/** The C4 chain down to the view's scope; a DFD adds itself as the last crumb so the paired C4 view is one click up. */
+export function breadcrumb(project: Project, view: DiagramView, rootLabel: string, dfdLabel?: string): Crumb[] {
   const trail: Crumb[] = [{ label: rootLabel, kind: 'c4_context', scopeId: null }]
   const chain = ancestorIds(project, view.scopeId).reverse()
   chain.forEach((id) => {
@@ -215,6 +236,7 @@ export function breadcrumb(project: Project, view: DiagramView, rootLabel: strin
     const kind = childViewKind(element)
     if (kind) trail.push({ label: element.name, kind, scopeId: id })
   })
+  if (isDfdView(view.kind)) trail.push({ label: dfdLabel ?? view.useCase ?? view.name, kind: view.kind, scopeId: view.scopeId, viewId: view.id })
   return trail
 }
 

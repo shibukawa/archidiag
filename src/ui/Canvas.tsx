@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { CANVAS_MARGIN_NODE, expandBoundaryToContain, keepOutside, overlaps } from '../core/layout'
-import type { Position, Rect } from '../core/model'
+import type { IntermediateKind, Position, Rect } from '../core/model'
 import { fitOuterBoundary, markerDefs, renderLegend, renderSvg, type RenderModel } from '../core/render'
 import type { Copy } from './i18n'
 import { Icon } from './icons'
@@ -17,7 +17,15 @@ export interface CanvasProps {
   onCommitBoundary: (boundary: Rect) => void
   onConnect: (sourceId: string, targetId: string) => void
   onBackgroundDoubleClick: () => void
+  /** An element dragged from the explorer was dropped at this canvas position (DFD views add a bound node). */
+  onDropElement?: (elementId: string, position: Position) => void
+  /** A process-to-process link awaits the choice of file or queue (rule: dfd-connection-policy). */
+  pendingIntermediate?: { sourceId: string; targetId: string } | null
+  onChooseIntermediate?: (kind: IntermediateKind | null) => void
 }
+
+/** MIME type of an element id dragged out of the explorer. */
+export const ELEMENT_DRAG_TYPE = 'application/x-c4sketch-element'
 
 interface DragState {
   pointerId: number
@@ -36,7 +44,7 @@ function capture(element: Element | null, pointerId: number) {
 }
 interface LinkDrag { pointerId: number; sourceId: string; from: Position; to: Position; hoverId?: string }
 
-export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPreview, onCommitPositions, onCommitBoundary, onConnect, onBackgroundDoubleClick }: CanvasProps) {
+export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPreview, onCommitPositions, onCommitBoundary, onConnect, onBackgroundDoubleClick, onDropElement, pendingIntermediate, onChooseIntermediate }: CanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const boundaryRef = useRef<BoundaryDrag | null>(null)
@@ -62,6 +70,8 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
 
   const nodeIdAt = (target: EventTarget | null) => (target as HTMLElement | null)?.closest?.('[data-node-id]')?.getAttribute('data-node-id') ?? undefined
   const edgeIdAt = (target: EventTarget | null) => (target as HTMLElement | null)?.closest?.('[data-edge-id]')?.getAttribute('data-edge-id') ?? undefined
+  const regionIdAt = (target: EventTarget | null) => (target as HTMLElement | null)?.closest?.('[data-region-id]')?.getAttribute('data-region-id') ?? undefined
+  const processGroupIdAt = (target: EventTarget | null) => (target as HTMLElement | null)?.closest?.('[data-pgroup-id]')?.getAttribute('data-pgroup-id') ?? undefined
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -85,7 +95,68 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
       onSelect([edgeId], event.shiftKey)
       return
     }
+    const regionId = regionIdAt(event.target)
+    if (regionId) {
+      onSelect([regionId], event.shiftKey)
+      return
+    }
+    const processGroupId = processGroupIdAt(event.target)
+    if (processGroupId) {
+      onSelect([processGroupId], event.shiftKey)
+      return
+    }
     if (!event.shiftKey) onSelect([], false)
+  }
+
+  // Hover highlight (requirement: edge-hover-highlight): classes are toggled on the rendered SVG without re-rendering it.
+  const clearHover = () => {
+    const host = hostRef.current
+    if (!host) return
+    host.querySelectorAll('.hl-edge, .hl-node, .hl-far, .hl-dim').forEach((item) => item.classList.remove('hl-edge', 'hl-node', 'hl-far', 'hl-dim'))
+  }
+  const handlePointerOver = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragRef.current || linkDrag) return
+    const host = hostRef.current
+    if (!host) return
+    const target = event.target as HTMLElement | null
+    const edge = target?.closest?.('[data-edge-id]') as HTMLElement | null
+    const node = edge ? null : (target?.closest?.('[data-node-id]') as HTMLElement | null)
+    clearHover()
+    if (edge) {
+      edge.classList.add('hl-edge')
+      const src = edge.getAttribute('data-src')
+      const dst = edge.getAttribute('data-dst')
+      host.querySelectorAll(`[data-node-id="${CSS.escape(src ?? '')}"], [data-node-id="${CSS.escape(dst ?? '')}"], [data-pgroup-id="${CSS.escape(src ?? '')}"], [data-pgroup-id="${CSS.escape(dst ?? '')}"]`).forEach((item) => item.classList.add('hl-node'))
+      return
+    }
+    if (node) {
+      const id = node.getAttribute('data-node-id') ?? ''
+      node.classList.add('hl-node')
+      host.querySelectorAll('[data-edge-id]').forEach((item) => {
+        const src = item.getAttribute('data-src')
+        const dst = item.getAttribute('data-dst')
+        if (src === id || dst === id) {
+          item.classList.add('hl-edge')
+          const far = src === id ? dst : src
+          host.querySelectorAll(`[data-node-id="${CSS.escape(far ?? '')}"]`).forEach((other) => other.classList.add('hl-far'))
+        } else item.classList.add('hl-dim')
+      })
+    }
+  }
+  const handlePointerLeave = () => clearHover()
+
+  const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!onDropElement || !event.dataTransfer.types.includes(ELEMENT_DRAG_TYPE)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    const elementId = event.dataTransfer.getData(ELEMENT_DRAG_TYPE)
+    if (!onDropElement || !elementId) return
+    event.preventDefault()
+    const point = toCanvas(event)
+    onDropElement(elementId, { x: Math.max(8, Math.round(point.x - 90)), y: Math.max(8, Math.round(point.y - 30)) })
   }
 
   /**
@@ -186,6 +257,9 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
     const point = toCanvas(event)
     const hit = model.nodes.find((node) => overlaps({ ...point, width: 1, height: 1 }, node.rect))
     if (hit) { onEnter(hit.id); return }
+    // The header band of an expanded logical process group collapses it; innermost group wins.
+    const header = [...model.processGroups].reverse().find((group) => overlaps({ ...point, width: 1, height: 1 }, { ...group.rect, height: 30 }))
+    if (header) { onEnter(header.id); return }
     if (!edgeIdAt(event.target)) onBackgroundDoubleClick()
   }
 
@@ -210,6 +284,14 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
     if (linkDrag && !single) setLinkDrag(null)
   }, [linkDrag, single])
 
+  // Escape abandons a link drag whose pointerup never arrived, so the handle comes back.
+  useEffect(() => {
+    if (!linkDrag) return
+    const handler = (event: KeyboardEvent) => { if (event.key === 'Escape') setLinkDrag(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [linkDrag])
+
   const width = model.size.width
   const height = model.size.height
   return (
@@ -223,7 +305,19 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onDoubleClick={handleDoubleClick}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onPointerOver={handlePointerOver}
+        onPointerLeave={handlePointerLeave}
       >
+        <style>{`
+          .hl-edge .edge-line { stroke: #2563eb !important; stroke-width: 2.6 !important; opacity: 1 !important; }
+          .hl-edge text { fill: #1d4ed8 !important; font-weight: 700; }
+          .hl-edge rect { stroke: #2563eb; }
+          .hl-node > path:first-of-type, .hl-node > rect:first-of-type, .hl-node > circle:first-of-type { stroke: #2563eb !important; stroke-width: 3 !important; filter: drop-shadow(0 0 4px rgba(37,99,235,0.55)); }
+          .hl-far > path:first-of-type, .hl-far > rect:first-of-type, .hl-far > circle:first-of-type { stroke: #60a5fa !important; stroke-width: 2.4 !important; }
+          .hl-dim { opacity: 0.35; }
+        `}</style>
         <div className="relative" style={{ width: width * zoom, height: height * zoom }}>
           <div className="absolute left-0 top-0 select-none" style={{ width, height, transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
             <div className="absolute inset-0" dangerouslySetInnerHTML={{ __html: svg }} />
@@ -244,6 +338,24 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
                 <Icon name="link" size={13} stroke={2} />
               </button>
             )}
+            {pendingIntermediate && onChooseIntermediate && (() => {
+              const source = nodeById.get(pendingIntermediate.sourceId)
+              const target = nodeById.get(pendingIntermediate.targetId)
+              if (!source || !target) return null
+              const x = (source.rect.x + source.rect.width + target.rect.x) / 2
+              const y = Math.min(source.rect.y, target.rect.y)
+              return (
+                <div className="absolute z-20 w-64 rounded-xl border border-blue-500 bg-white p-3 text-xs text-slate-800 shadow-xl" style={{ left: Math.max(8, x - 128), top: Math.max(8, y - 8) }} onPointerDown={(event) => event.stopPropagation()}>
+                  <div className="mb-2 leading-4">{copy.chooseIntermediate}</div>
+                  <div className="flex gap-2">
+                    <button type="button" className="flex-1 rounded-md border border-blue-500 bg-blue-50 px-2 py-1 font-semibold text-blue-700" onClick={() => onChooseIntermediate('api_document')}>{copy.insertApi}</button>
+                    <button type="button" className="flex-1 rounded-md border border-slate-300 px-2 py-1 font-semibold hover:border-blue-500 hover:text-blue-700" onClick={() => onChooseIntermediate('file')}>{copy.insertFile}</button>
+                    <button type="button" className="flex-1 rounded-md border border-slate-300 px-2 py-1 font-semibold hover:border-blue-500 hover:text-blue-700" onClick={() => onChooseIntermediate('queue')}>{copy.insertQueue}</button>
+                    <button type="button" className="rounded-md px-2 py-1 text-slate-500 hover:text-slate-800" onClick={() => onChooseIntermediate(null)} aria-label={copy.cancel}><Icon name="x" size={13} /></button>
+                  </div>
+                </div>
+              )
+            })()}
             {model.boundary && (
               <button
                 type="button"

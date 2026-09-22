@@ -36,7 +36,7 @@ relationships (routing: rule:edge-routing):
   projected: hollow arrowhead when an endpoint was promoted to an ancestor
   entity: UML multiplicity labels at both ends; reference open arrowhead, dependent filled diamond at the owner, inherit hollow triangle at the parent, label dashed
 dfd:
-  external_entity, process, data_store, intermediate_file, intermediate_queue, diagram_ref, flow, transaction_boundary: theme tokens; the compact theme uses cylinder for database-backed stores and entity stores, open_rect only for stores of kind other, folded_rect for files, horizontal_cylinder for queues, home_plate for references, a numbered rounded_box with side bars for processes
+  external_entity, process, process_group, data_store, intermediate_api_document, intermediate_file, intermediate_queue, diagram_ref, flow, transaction_boundary: theme tokens; the compact theme uses cylinder for database-backed stores and entity stores, open_rect only for stores of kind other, folded_rect with a braces badge for API documents and a file badge for files, horizontal_cylinder for queues, home_plate for references, a numbered rounded_box with side bars for processes, and the same box with a heavier outline for an expanded group
 overrides:
   perspective_styles: an activated perspective's per-value styles replace fill or stroke but never the shape
   lifecycle: planned dashed outline; deprecated gray fill with strike badge
