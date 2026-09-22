@@ -25,6 +25,8 @@ npm run dev
 
 `npm run build` type-checks and bundles the static site. The app runs entirely in the browser; projects persist to local storage and export as JSON.
 
+Every push to `main` runs the same build in GitHub Actions (`.github/workflows/deploy-pages.yml`) and publishes `dist/` to GitHub Pages at https://shibukawa.github.io/archidiag/.
+
 ## Layout
 
 - `src/core/` — runtime-neutral model, commands, view projection, side-port routing, style themes, legend and title-block frame, layered auto layout, layout helpers, checks, JSON migration, draw.io export. No DOM or React imports.
