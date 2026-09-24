@@ -2,7 +2,11 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { ancestorIds, APPLICATION_KINDS, CARDINALITIES, childrenOf, childViewKind, DATA_STORE_KINDS, defaultErdRelationship, effectiveCategory, entitiesOfStore, ENTITY_CLASSIFICATIONS, ENTITY_STORAGES, ERD_RELATIONSHIP_KINDS, estimateVolume, formatBytes, formatCount, GROWTH_PERIODS, isErdRelationship, isErdStore, LEVEL_BY_VIEW_KIND, makeAttribute, REFRESH_EVERY, REFRESH_MODES, SQL_STORE_KINDS, type ApplicationKind, type Attribute, type Cardinality, type ContainerCategory, type DataStoreKind, type DiagramView, type Element, type EntityClassification, type EntityStorage, type EntityVolume, type ErdRelationshipKind, type GrowthPeriod, type Group, type Project, type RefreshEvery, type RefreshMode, type Relationship, type SqlDialect } from '../core/model'
 import { allRelationships, dfdOf, dfdUsage } from '../core/dfd'
 import { isDfdView, isStoreItem } from '../core/model'
+import { domainTypeLabel, expandColumns, isDefined } from '../core/domains'
+import { attributeName } from '../core/vocabulary'
 import { scopeElements } from '../core/views'
+import { DOMAIN_DRAG_TYPE } from './DictionaryPanel'
+import { BindingLine, IndicatorDot, TermChips } from './VocabularyBits'
 import { BoundaryEditor, DfdViewEditor, FlowEditor, GroupEditor, MultiFlows, MultiNodes, NodeEditor, type DfdActions } from './DfdInspector'
 import type { Copy } from './i18n'
 import { dfdLabel, roleLabel } from './i18n'
@@ -33,6 +37,11 @@ export interface InspectorProps {
   onMaterialize: (relationship: Relationship) => void
   /** DFD editing; present when the current view is a DFD. */
   dfd?: DfdActions
+  onOpenEntry: (entryId: string) => void
+  onOpenDomain: (domainId: string) => void
+  /** Registers a word as a vocabulary entry and opens it. */
+  onRegisterTerm: (word: string) => void
+  onAssignDomain: (entityId: string, attributeId: string, domainId: string) => void
 }
 
 export function Inspector(props: InspectorProps) {
@@ -87,7 +96,7 @@ export function Field({ label, children }: { label: string; children: React.Reac
   return <label className="mb-3 block text-[10px] font-semibold uppercase tracking-wider text-muted">{label}<div className="mt-1 normal-case tracking-normal">{children}</div></label>
 }
 
-function ElementEditor({ project, view, element, copy, groups, onPatchElement, onDeleteElements, onOpenScope, onSelect, onEndBatch, onSetHorizon, onOpenView }: InspectorProps & { element: Element }) {
+function ElementEditor({ project, view, element, copy, groups, onPatchElement, onDeleteElements, onOpenScope, onSelect, onEndBatch, onSetHorizon, onOpenView, onOpenEntry, onOpenDomain, onRegisterTerm, onAssignDomain }: InspectorProps & { element: Element }) {
   const kind = childViewKind(element)
   const related = Object.values(allRelationships(project)).filter((relationship) => relationship.sourceId === element.id || relationship.targetId === element.id)
   const usage = dfdUsage(project, element.id)
@@ -99,7 +108,13 @@ function ElementEditor({ project, view, element, copy, groups, onPatchElement, o
         {kind && <button type="button" className="ml-auto flex items-center gap-1 text-cyan hover:underline" onClick={() => onOpenScope(kind, element.id)}><Icon name="external" size={12} />{copy.open}</button>}
       </div>
       <Field label={copy.name}><input className="inspector-input" value={element.name} onChange={(event) => onPatchElement(element.id, { name: event.target.value }, `${element.id}:name`)} onBlur={onEndBatch} /></Field>
+      {element.kind === 'entity' && <BindingLine project={project} name={element.name} plural={project.settings.namingPolicy.tableNumber === 'plural'} copy={copy} onOpenEntry={onOpenEntry} onRegister={onRegisterTerm} />}
+      {element.kind !== 'entity' && element.vocabularyBound && <BindingLine project={project} name={element.name} copy={copy} onOpenEntry={onOpenEntry} onRegister={onRegisterTerm} />}
       <Field label={copy.description}><textarea className="inspector-input min-h-[72px]" value={element.description} onChange={(event) => onPatchElement(element.id, { description: event.target.value }, `${element.id}:description`)} onBlur={onEndBatch} /></Field>
+      <TermChips project={project} texts={element.kind === 'entity' || element.vocabularyBound ? [element.description] : [element.name, element.description]} copy={copy} onOpenEntry={onOpenEntry} />
+      {element.kind !== 'entity' && (
+        <label className="mb-3 flex cursor-pointer items-start gap-2 text-xs"><input type="checkbox" className="checkbox checkbox-xs mt-0.5" checked={Boolean(element.vocabularyBound)} onChange={(event) => onPatchElement(element.id, { vocabularyBound: event.target.checked || undefined })} /><span>{copy.dict.bindName}<span className="block text-[10px] leading-4 text-muted">{copy.dict.bindNameHint}</span></span></label>
+      )}
       {element.kind !== 'entity' && !isStoreItem(element) && <Field label={copy.technology}><input className="inspector-input" value={element.technology} onChange={(event) => onPatchElement(element.id, { technology: event.target.value }, `${element.id}:technology`)} onBlur={onEndBatch} /></Field>}
       {element.kind === 'component' && (
         <label className="mb-3 flex cursor-pointer items-start gap-2 text-xs"><input type="checkbox" className="checkbox checkbox-xs mt-0.5" checked={Boolean(element.passthrough)} onChange={(event) => onPatchElement(element.id, { passthrough: event.target.checked || undefined })} /><span>{copy.passthrough}<span className="block text-[10px] leading-4 text-muted">{copy.passthroughHint}</span></span></label>
@@ -118,7 +133,7 @@ function ElementEditor({ project, view, element, copy, groups, onPatchElement, o
           <Field label={copy.storageKind}>
             <RadioRow name={`storage-${element.id}`} value={element.storageKind ?? 'table'} options={ENTITY_STORAGES.map((option) => [option, copy.storages[option]])} onChange={(value) => onPatchElement(element.id, { storageKind: value === 'table' ? undefined : (value as EntityStorage) })} />
           </Field>
-          <FieldList element={element} copy={copy} onChange={(attributes, batchKey) => onPatchElement(element.id, { attributes }, batchKey)} onEndBatch={onEndBatch} />
+          <FieldList element={element} project={project} copy={copy} onChange={(attributes, batchKey) => onPatchElement(element.id, { attributes }, batchKey)} onEndBatch={onEndBatch} onAssignDomain={(attributeId, domainId) => onAssignDomain(element.id, attributeId, domainId)} onOpenDomain={onOpenDomain} onOpenEntry={onOpenEntry} onRegister={onRegisterTerm} />
           <VolumeSection element={element} horizon={project.settings.volumeHorizonMonths} copy={copy} onChange={(volume, batchKey) => onPatchElement(element.id, { volume }, batchKey)} onEndBatch={onEndBatch} onSetHorizon={onSetHorizon} />
         </>
       )}
@@ -200,7 +215,7 @@ function MultiSelection({ elements, copy, onDeleteElements }: InspectorProps & {
   )
 }
 
-function RelationshipEditor({ project, view, relationship, copy, onPatchRelationship, onDeleteRelationship, onSelect, onEndBatch, onOpenView, onMaterialize }: InspectorProps & { relationship: Relationship }) {
+function RelationshipEditor({ project, view, relationship, copy, onPatchRelationship, onDeleteRelationship, onSelect, onEndBatch, onOpenView, onMaterialize, onOpenEntry }: InspectorProps & { relationship: Relationship }) {
   const source = project.elements[relationship.sourceId]
   const target = project.elements[relationship.targetId]
   if (relationship.derived) {
@@ -276,6 +291,7 @@ function RelationshipEditor({ project, view, relationship, copy, onPatchRelation
         <Field label={copy.technology}><input className="inspector-input" value={relationship.technology ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { technology: event.target.value }, `${relationship.id}:technology`)} onBlur={onEndBatch} /></Field>
       )}
       <Field label={copy.description}><textarea className="inspector-input min-h-[60px]" value={relationship.description ?? ''} onChange={(event) => onPatchRelationship(relationship.id, { description: event.target.value }, `${relationship.id}:description`)} onBlur={onEndBatch} /></Field>
+      <TermChips project={project} texts={[relationship.label, relationship.description ?? '']} copy={copy} onOpenEntry={onOpenEntry} />
       {carryingFlows.length > 0 && (
         <div className="mb-3">
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">{copy.onThisLine}</div>
@@ -349,8 +365,11 @@ function ViewEditor({ project, view, copy, groups, onPatchView, onCreateGroup, o
  * Entity field list: every attribute with its flags, quick entry that keeps focus (flow: erd-authoring),
  * and an important-only filter. The canvas draws only the important rows (decision: important-fields-on-canvas).
  */
-function FieldList({ element, copy, onChange, onEndBatch }: { element: Element; copy: Copy; onChange: (attributes: Attribute[], batchKey?: string) => void; onEndBatch: () => void }) {
+function FieldList({ element, project, copy, onChange, onEndBatch, onAssignDomain, onOpenDomain, onOpenEntry, onRegister }: { element: Element; project: Project; copy: Copy; onChange: (attributes: Attribute[], batchKey?: string) => void; onEndBatch: () => void; onAssignDomain: (attributeId: string, domainId: string) => void; onOpenDomain: (domainId: string) => void; onOpenEntry: (entryId: string) => void; onRegister: (word: string) => void }) {
   const attributes = element.attributes ?? []
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const domainOptions = Object.values(project.domains).sort((a, b) => a.name.localeCompare(b.name))
+  const acceptsDomain = (event: React.DragEvent) => event.dataTransfer.types.includes(DOMAIN_DRAG_TYPE)
   const [name, setName] = useState('')
   const [importantOnly, setImportantOnly] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -367,10 +386,10 @@ function FieldList({ element, copy, onChange, onEndBatch }: { element: Element; 
     ;[next[index], next[target]] = [next[target], next[index]]
     onChange(next)
   }
-  const add = () => {
-    const trimmed = name.trim()
+  const add = (domainId?: string) => {
+    const trimmed = name.trim() || (domainId ? project.domains[domainId]?.name ?? '' : '')
     if (!trimmed) return
-    onChange([...attributes, makeAttribute(trimmed)])
+    onChange([...attributes, makeAttribute(trimmed, domainId ? { domainId } : {})])
     setName('')
     inputRef.current?.focus()
   }
@@ -388,12 +407,23 @@ function FieldList({ element, copy, onChange, onEndBatch }: { element: Element; 
         <label className="flex cursor-pointer items-center gap-1 text-[10px] text-muted"><input type="checkbox" className="checkbox checkbox-xs" checked={importantOnly} onChange={(event) => setImportantOnly(event.target.checked)} />{copy.importantOnly}</label>
       </div>
       <div className="rounded-lg border border-line bg-ink/40">
-        {shown.map((attribute, index) => (
-          <div key={attribute.id} className={`border-b border-line/60 px-2 py-1 last:border-b-0 ${attribute.important ? '' : 'opacity-75'}`}>
+        {shown.map((attribute, index) => {
+          const domain = attribute.domainId ? project.domains[attribute.domainId] : undefined
+          const typeText = domain ? domainTypeLabel(project, domain) : ''
+          const defined = domain ? isDefined(project, domain) : false
+          const sameName = domain && domain.name.trim().toLowerCase() === attribute.name.trim().toLowerCase()
+          const effectiveName = attributeName(project, attribute)
+          return (
+          <div key={attribute.id} className={`border-b border-line/60 px-2 py-1 last:border-b-0 ${attribute.important ? '' : 'opacity-75'} ${dropTarget === attribute.id ? 'bg-cyan/10 ring-1 ring-cyan/50' : ''}`}
+            onDragOver={(event) => { if (acceptsDomain(event)) { event.preventDefault(); setDropTarget(attribute.id) } }}
+            onDragLeave={() => setDropTarget(null)}
+            onDrop={(event) => { const domainId = event.dataTransfer.getData(DOMAIN_DRAG_TYPE); setDropTarget(null); if (domainId) { event.preventDefault(); onAssignDomain(attribute.id, domainId) } }}>
             <div className="flex items-center gap-1">
               <input type="checkbox" className="checkbox checkbox-xs" checked={attribute.important} title={copy.important} onChange={(event) => update(attribute.id, { important: event.target.checked })} />
               {attribute.primaryKey && <Icon name="key" size={11} className="shrink-0 text-cyan" />}
-              <input className="min-w-0 flex-1 bg-transparent text-xs text-base-content outline-none" value={attribute.name} onChange={(event) => update(attribute.id, { name: event.target.value }, `${attribute.id}:name`)} onBlur={onEndBatch} onFocus={() => setOpenId(attribute.id)} />
+              <input className="min-w-0 flex-1 bg-transparent text-xs text-base-content outline-none" value={attribute.name} placeholder={attribute.useDomainName ? domain?.name : undefined} onChange={(event) => update(attribute.id, { name: event.target.value }, `${attribute.id}:name`)} onBlur={onEndBatch} onFocus={() => setOpenId(attribute.id)} />
+              {attribute.useDomainName && domain && <span className="shrink-0 text-[10px] text-violet">+{domain.name}</span>}
+              <IndicatorDot project={project} name={effectiveName} copy={copy} />
               {flag(attribute.id, 'primaryKey', attribute.primaryKey, copy.primaryKey, copy.primaryKey)}
               {flag(attribute.id, 'required', attribute.required, '!', copy.required)}
               {flag(attribute.id, 'unique', attribute.unique, 'U', copy.unique)}
@@ -401,7 +431,19 @@ function FieldList({ element, copy, onChange, onEndBatch }: { element: Element; 
             </div>
             {openId === attribute.id && (
               <div className="mt-1 flex items-start gap-1 pl-5">
-                <textarea className="inspector-input min-h-[40px] flex-1 py-1 text-xs" placeholder={copy.fieldDescription} value={attribute.description} onChange={(event) => update(attribute.id, { description: event.target.value }, `${attribute.id}:description`)} onBlur={onEndBatch} />
+                <div className="min-w-0 flex-1">
+                  <textarea className="inspector-input min-h-[40px] w-full py-1 text-xs" placeholder={copy.fieldDescription} value={attribute.description} onChange={(event) => update(attribute.id, { description: event.target.value }, `${attribute.id}:description`)} onBlur={onEndBatch} />
+                  <div className="mt-1 flex items-center gap-1">
+                    <select className="min-w-0 flex-1 rounded-md border border-line bg-ink/60 px-1.5 py-1 text-[11px]" title={copy.dict.domain} value={attribute.domainId ?? ''} onChange={(event) => event.target.value && onAssignDomain(attribute.id, event.target.value)}>
+                      {!attribute.domainId && <option value="">—</option>}
+                      {domainOptions.map((option) => <option key={option.id} value={option.id}>{option.name}{domainTypeLabel(project, option) ? ` · ${domainTypeLabel(project, option)}` : ''}</option>)}
+                    </select>
+                    {domain && <button type="button" className="grid h-6 w-6 place-items-center rounded text-muted hover:bg-white/10 hover:text-cyan" title={copy.dict.openDomain} onClick={() => onOpenDomain(domain.id)}><Icon name="external" size={11} /></button>}
+                  </div>
+                  <label className="mt-1 flex cursor-pointer items-center gap-1.5 text-[10px] text-muted"><input type="checkbox" className="checkbox checkbox-xs" checked={Boolean(attribute.useDomainName)} onChange={(event) => update(attribute.id, { useDomainName: event.target.checked || undefined })} />{copy.dict.useDomainName}</label>
+                  <div className="mt-1"><BindingLine project={project} name={effectiveName} copy={copy} onOpenEntry={onOpenEntry} onRegister={onRegister} /></div>
+                  <div className="-mt-2 font-mono text-[10px] text-muted">{expandColumns(project, attribute).map((column) => `${column.name} ${column.type ?? '?'}`).join(', ')}</div>
+                </div>
                 <div className="flex flex-col gap-0.5">
                   <button type="button" className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-white/10 disabled:opacity-30" title={copy.moveUp} disabled={index === 0 || importantOnly} onClick={() => move(attribute.id, -1)}><Icon name="arrowUp" size={11} /></button>
                   <button type="button" className="grid h-5 w-5 place-items-center rounded text-muted hover:bg-white/10 disabled:opacity-30" title={copy.moveDown} disabled={index === shown.length - 1 || importantOnly} onClick={() => move(attribute.id, 1)}><Icon name="arrowDown" size={11} /></button>
@@ -409,9 +451,18 @@ function FieldList({ element, copy, onChange, onEndBatch }: { element: Element; 
                 </div>
               </div>
             )}
+            {domain && (
+              <button type="button" className={`ml-5 flex max-w-full items-center gap-1 truncate text-left text-[10px] ${defined ? 'text-muted' : 'text-amber/90'} hover:text-cyan`} title={copy.dict.openDomain} onClick={() => onOpenDomain(domain.id)}>
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${defined ? 'bg-cyan/70' : 'border border-dashed border-amber'}`} />
+                <span className="truncate">{sameName ? '' : `${domain.name}: `}{typeText || copy.dict.unresolved}</span>
+              </button>
+            )}
           </div>
-        ))}
-        <div className="px-2 py-1">
+          )
+        })}
+        <div className="px-2 py-1"
+          onDragOver={(event) => { if (acceptsDomain(event)) event.preventDefault() }}
+          onDrop={(event) => { const domainId = event.dataTransfer.getData(DOMAIN_DRAG_TYPE); if (domainId) { event.preventDefault(); add(domainId) } }}>
           <input
             ref={inputRef}
             className="w-full bg-transparent text-xs text-base-content outline-none placeholder:text-muted/60"

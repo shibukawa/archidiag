@@ -28,8 +28,19 @@ jobs:
         with:
           path: dist
 
+  # Runs beside build: the core, the Bun server, collaboration, and MCP work end to end.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.1.42
+      - run: bun install
+      - run: bun run test:smoke
+
   deploy:
-    needs: build
+    needs: [build, smoke]
     runs-on: ubuntu-latest
     permissions:
       pages: write

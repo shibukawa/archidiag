@@ -6,7 +6,7 @@ title: Server Authority When Present
 When a project is opened through system:bun-server, the server is the single authority that validates, orders, and persists operations; without a server the browser keeps the same authority locally.
 
 ```yaml
-status: accepted 2026-09-20
+status: accepted 2026-09-20; with_server apply, reject, and offline amended by decision:crdt-collaboration (CRDT merge through the server hub)
 with_server:
   apply: client applies optimistically, submits data:edit-operation with base_revision, server validates and assigns the next revision
   reject: server returns a descriptive error; client rolls back the optimistic change

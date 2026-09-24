@@ -1,6 +1,8 @@
 import { arrangeView } from './arrange'
 import { addBoundNode, addFreeNode, createBoundary, createDfd, createFlow, createGroup, createView, groupMembers, setElementGroup, setPositions } from './commands'
 import { dfdOf } from './dfd'
+import { assignMissingDomains, createCategory, createDictionaryDomain, findDomainByName, patchDomain } from './domains'
+import { addEntry } from './vocabulary'
 import { emptyProject, makeAttribute, type Attribute, type Element, type Position, type Project, type Relationship } from './model'
 
 /** Attribute shorthand: "name" or "name!" for important; a leading "#" marks the primary key. */
@@ -185,5 +187,42 @@ export function commerceStarter(): Project {
   }
   const dfdNodes = Object.values(dfdOf(project.views[v]).nodes)
   project = setPositions(project, v, Object.fromEntries(dfdNodes.map((node) => [node.id, dfdPositions[node.role === 'start' ? 'start' : node.elementId ?? '']]).filter(([, position]) => position)))
-  return project
+  return seedDictionaries(project)
+}
+
+/**
+ * Vocabulary and domains for the starter. Names are typed in English, so the business names are English; the system
+ * names are the Japanese formal names, which the name display switch shows. Every field gets its automatic domain,
+ * and a pre-registered CreatedAt domain sits beside the automatic created_at one as a merge candidate.
+ */
+function seedDictionaries(project: Project): Project {
+  const terms: Array<[string, string, string, string?]> = [
+    ['Customer', '顧客', 'customer', 'A person or company that buys from the shop.'],
+    ['Order', '注文', 'order', 'One checkout by a customer.'],
+    ['Line', '明細', 'line'],
+    ['Payment', '支払', 'payment'],
+    ['Refund', '返金', 'refund'],
+    ['Address', '住所', 'address'],
+    ['Product', '商品', 'product', 'A sellable item.'],
+    ['Inventory', '在庫', 'inventory'],
+    ['Availability', '販売可能数', 'availability'],
+    ['id', 'ID', 'id', 'Surrogate key: a system-generated identity with no business meaning.'],
+    ['created_at', '作成日時', 'created_at', 'When the row was inserted.'],
+    ['updated_at', '更新日時', 'updated_at'],
+    ['status', '状態', 'status'],
+    ['email', 'メールアドレス', 'email'],
+    ['amount', '金額', 'amount'],
+    ['quantity', '数量', 'quantity'],
+    ['price', '価格', 'price'],
+    ['number', '番号', 'number'],
+  ]
+  let next = assignMissingDomains(project)
+  terms.forEach(([businessName, systemName, physicalName, meaning]) => { next = addEntry(next, businessName, { systemName, physicalName, meaning: meaning ?? '' }).project })
+  const timestamps = createCategory(next, 'Timestamps')
+  next = timestamps.project
+  const createdAt = createDictionaryDomain(next, 'CreatedAt')
+  next = patchDomain(createdAt.project, createdAt.domain.id, { shape: 'single_field', type: { primitive: 'timestamptz' }, categoryId: timestamps.category.id, description: 'When the row was inserted.' })
+  const email = findDomainByName(next, 'email')
+  if (email) next = patchDomain(next, email.id, { shape: 'single_field', type: { primitive: 'varchar', length: 254 }, description: 'An RFC 5321 mailbox address.' })
+  return next
 }

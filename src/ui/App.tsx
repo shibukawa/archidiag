@@ -4,15 +4,22 @@ import * as commands from '../core/commands'
 import { parseProject, serializeProject } from '../core/io'
 import { allRelationships, connectionVerdict, dfdOf, importableLinks, nodeElement, nodeName, nextProcessNumber, roleForElement, type PlacementOption } from '../core/dfd'
 import { alignBoxes, arrangeBoxes, dfdNodeSize, distributeBoxes, nextFreePosition, nodeSize, nodeSizeFor, spaceBoxes, type AlignMode, type ArrangeMode, type Box } from '../core/layout'
-import { childViewKind, defaultErdRelationship, displayModesFor, emptyProject, isDfdView, isErdStore, isErdView, itemKindFor, pairedC4Kind, pairedDfdKind, scopeViewKindFor, storeOf, type DfdNode, type DiagramView, type Element, type IntermediateKind, type Position, type Project, type Rect, type Relationship, type ViewKind } from '../core/model'
+import { NAME_MODES, childViewKind, defaultErdRelationship, displayModesFor, emptyProject, isDfdView, isErdView, pairedC4Kind, pairedDfdKind, scopeViewKindFor, storeOf, type DfdNode, type DiagramView, type Element, type IntermediateKind, type Position, type Project, type Rect, type Relationship, type ViewKind } from '../core/model'
 import { buildRenderModel } from '../core/render'
 import { commerceStarter } from '../core/starter'
 import { THEMES } from '../core/theme'
 import { allFindings, type Finding } from '../core/validate'
 import { breadcrumb, defaultView, ensureDefaultView, viewsForScope } from '../core/views'
+import { assignDomain } from '../core/domains'
+import { addEntry, displayProject, findEntryByTerm } from '../core/vocabulary'
 import { Canvas } from './Canvas'
+import { CollabBar } from './CollabBar'
+import { createProject, detectServer, downloadProject, fetchSession, loadCredentials, projectFromUrl, saveCredentials, setProjectInUrl, undoAgent, type Credentials, type ServerInfo, type SessionInfo } from './serverApi'
+import { useCollabProject } from './useCollabProject'
+import { DictionaryPanel, type DictionaryTab, type RevealTarget } from './DictionaryPanel'
 import { Explorer } from './Explorer'
-import { exportView, fileStem, type ExportFormat } from './exporters'
+import { buildAllDdl, buildDdl } from '../core/ddl'
+import { downloadBlob, exportView, fileStem, type ExportFormat } from './exporters'
 import type { DfdActions } from './DfdInspector'
 import { COPY, dfdLabel, renderLabels, viewTitle, type Locale } from './i18n'
 import { Icon, type IconName } from './icons'
@@ -22,7 +29,8 @@ import { useProjectHistory } from './useHistory'
 import { clampZoom } from './usePinchZoom'
 import { ValidationPanel } from './ValidationPanel'
 import { VolumePanel } from './VolumePanel'
-import { registerWebMcpTools } from './webmcp'
+import { createToolHost } from '../core/tools'
+import { logWebMcpEdit, registerWebMcpTools } from './webmcp'
 
 const STORAGE_KEY = 'c4sketch-project-v2'
 const LEGACY_KEY = 'archidiag-project-v1'
@@ -46,10 +54,49 @@ function parseHash(): { viewId?: string; select: string[] } {
 }
 
 export default function App() {
-  const history = useProjectHistory(loadInitial())
-  const { project, projectRef, commit, endBatch, replace, undo, redo, canUndo, canRedo } = history
+  const local = useProjectHistory(loadInitial())
   const [locale, setLocale] = useState<Locale>(() => (localStorage.getItem(LOCALE_KEY) === 'ja' ? 'ja' : 'en'))
   const copy = COPY[locale]
+
+  // The optional server (requirement: bun-backend): detected at start; a shared project is named by ?project=.
+  const [server, setServer] = useState<ServerInfo | undefined>()
+  const [credentials, setCredentials] = useState<Credentials>(loadCredentials)
+  const [session, setSession] = useState<SessionInfo | undefined>()
+  const [sessionError, setSessionError] = useState('')
+  const [sharedProjectId, setSharedProjectId] = useState<string | undefined>(projectFromUrl)
+  useEffect(() => { detectServer().then(setServer) }, [])
+  useEffect(() => {
+    if (!server) return
+    setSessionError('')
+    fetchSession(credentials).then(setSession).catch((error: Error) => { setSession(undefined); setSessionError(error.message) })
+  }, [credentials, server])
+  const collabTarget = useMemo(() => (server && session && sharedProjectId ? { projectId: sharedProjectId, credentials: { ...credentials, name: session.user.name }, color: session.user.color, role: session.role } : null), [credentials, server, session, sharedProjectId])
+  const collab = useCollabProject(collabTarget)
+  const shared = Boolean(collabTarget && collab.project)
+  const sharedRef = useRef(shared)
+  sharedRef.current = shared
+  // One ref for whichever project is live, so callbacks read the latest state right after a commit.
+  const projectRef = useRef({ get current(): Project { return sharedRef.current ? collab.projectRef.current! : local.projectRef.current } }).current
+  const project = shared ? collab.project! : local.project
+  const readOnly = shared && collab.readOnly
+  const say = useCallback((message: string) => setNotice(message), [])
+  const { commit: localCommit, replace: localReplace } = local
+  const { commit: collabCommit, readOnly: collabReadOnly, publishView } = collab
+  const commit = useCallback((mutator: (current: Project) => Project, batchKey?: string) => {
+    if (!sharedRef.current) { localCommit(mutator, batchKey); return }
+    if (collabReadOnly) { setNotice(copy.collab.readOnlyEdit); return }
+    collabCommit(mutator, batchKey)
+  }, [collabCommit, collabReadOnly, copy.collab.readOnlyEdit, localCommit])
+  const endBatch = shared ? collab.endBatch : local.endBatch
+  const undo = shared ? collab.undo : local.undo
+  const redo = shared ? collab.redo : local.redo
+  const canUndo = shared ? collab.canUndo : local.canUndo
+  const canRedo = shared ? collab.canRedo : local.canRedo
+  /** New, imported, and starter projects are local: opening one leaves the shared project first. */
+  const replace = useCallback((next: Project) => {
+    if (sharedRef.current || sharedProjectId) { setSharedProjectId(undefined); setProjectInUrl(undefined) }
+    localReplace(next)
+  }, [localReplace, sharedProjectId])
   const initialHash = useMemo(parseHash, [])
   const [currentViewId, setCurrentViewId] = useState<string | null>(initialHash.viewId ?? null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialHash.select))
@@ -60,6 +107,7 @@ export default function App() {
   const [showVolume, setShowVolume] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showNew, setShowNew] = useState(false)
+  const [dictionary, setDictionary] = useState<{ tab: DictionaryTab; focusId?: string } | null>(null)
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState('')
   const [pendingIntermediate, setPendingIntermediate] = useState<{ sourceId: string; targetId: string } | null>(null)
@@ -82,12 +130,18 @@ export default function App() {
     return defaultView(project, 'c4_context', null) ?? ensureDefaultView(project, 'c4_context', null).view
   }, [currentViewId, project])
 
+  const connecting = Boolean(collabTarget && !collab.project)
   useEffect(() => {
-    if (!project.views[view.id]) commit((current) => withInitialLayout(commands.upsertView(current, view), view.id))
+    // While a shared project connects, the local project is still on screen; the linked view must wait for it.
+    if (connecting) return
+    // A read-only participant cannot store the view it falls back to; it keeps showing it without saving.
+    if (!project.views[view.id]) { if (!readOnly) commit((current) => withInitialLayout(commands.upsertView(current, view), view.id)); return }
     if (currentViewId !== view.id) setCurrentViewId(view.id)
-  }, [commit, currentViewId, project.views, view, withInitialLayout])
+  }, [commit, connecting, currentViewId, project.views, readOnly, view, withInitialLayout])
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, serializeProject(project)) }, [project])
+  // Local browser storage holds the local project only; a shared project lives on the server.
+  useEffect(() => { localStorage.setItem(STORAGE_KEY, serializeProject(local.project)) }, [local.project])
+  useEffect(() => { if (shared) publishView(view.id, [...selectedIds]) }, [publishView, selectedIds, shared, view.id])
   useEffect(() => { localStorage.setItem(LOCALE_KEY, locale) }, [locale])
   useEffect(() => { if (!notice) setNotice(copy.saved) }, [copy.saved, notice])
   useEffect(() => {
@@ -110,8 +164,11 @@ export default function App() {
   }, [projectRef])
 
   const theme = THEMES[project.settings.styleTheme] ?? THEMES.compact
-  const labels = useMemo(() => renderLabels(copy, project, view), [copy, project, view])
-  const model = useMemo(() => buildRenderModel(project, view, theme, labels, { positions: preview.positions ?? undefined, boundary: preview.boundary ?? undefined }), [labels, preview, project, theme, view])
+  // Labels follow the view's name mode; the display project changes names only (requirement: name-display-switching).
+  const shown = useMemo(() => displayProject(project, view.nameMode), [project, view.nameMode])
+  const nameModeNote = view.nameMode && view.nameMode !== 'business' && Object.keys(project.vocabulary).length ? copy.nameModes[view.nameMode] : undefined
+  const labels = useMemo(() => renderLabels(copy, shown, view, nameModeNote), [copy, nameModeNote, shown, view])
+  const model = useMemo(() => buildRenderModel(shown, view, theme, labels, { positions: preview.positions ?? undefined, boundary: preview.boundary ?? undefined }), [labels, preview, shown, theme, view])
   const findings = useMemo(() => allFindings(project), [project])
   const groups = useMemo(() => Object.values(project.groups), [project.groups])
   const scopeGroups = useMemo(() => groups.filter((group) => group.scopeId === view.scopeId), [groups, view.scopeId])
@@ -123,7 +180,6 @@ export default function App() {
   const dfdSiblings = useMemo(() => (dfdKind ? viewsForScope(project, dfdKind, view.scopeId) : []), [dfdKind, project, view.scopeId])
   const selectedNodes = useMemo(() => model.nodes.filter((node) => selectedIds.has(node.id)), [model.nodes, selectedIds])
 
-  const say = useCallback((message: string) => setNotice(message), [])
   const setHorizon = useCallback((months: number) => commit((current) => ({ ...current, settings: { ...current.settings, volumeHorizonMonths: months } }), 'settings:horizon'), [commit])
   // The data store whose volume the bubble chart shows: the scope of a Component ERD, or the owner store of a Code ERD.
   const volumeStoreId = isErdView(view.kind) && view.scopeId ? (view.kind === 'erd_component' ? view.scopeId : storeOf(project, project.elements[view.scopeId])?.id) : undefined
@@ -284,6 +340,7 @@ export default function App() {
       if (added.node) setSelectedIds(new Set([added.node.id]))
     },
     openView,
+    openEntry: (entryId) => setDictionary({ tab: 'vocabulary', focusId: entryId }),
   }), [commit, copy, model.nodes, openElement, openView, projectRef, say, view.displayMode, view.id, zoomProcess])
 
   /** An element dragged from the explorer becomes a bound node at the drop point; an element already present is selected instead. */
@@ -444,17 +501,27 @@ export default function App() {
     return true
   }, [commit, projectRef, selectedNodes, view.id])
 
+  /** DDL for the data store of the open ERD, or for every database when no ERD is open (requirement: sql-ddl-export). */
+  const exportDdl = useCallback(() => {
+    setShowExport(false)
+    const result = volumeStoreId ? buildDdl(project, volumeStoreId) : buildAllDdl(project)
+    if (!result.sql.trim()) { say(copy.ddlNoStore); return }
+    downloadBlob(new Blob([result.sql], { type: 'application/sql' }), `${fileStem(project, volumeStoreId ? project.elements[volumeStoreId]?.name ?? 'ddl' : 'ddl')}.sql`)
+    const count = (kind: string) => result.issues.filter((issue) => issue.kind === kind).length
+    say(result.issues.length ? copy.ddlExportedWithIssues(count('unresolved_name'), count('untyped'), count('lossy')) : `${copy.exported}: SQL`)
+  }, [copy, project, say, volumeStoreId])
+
   const doExport = useCallback(async (format: ExportFormat) => {
     setShowExport(false)
     try {
-      const exportLabels = renderLabels(copy, project, view, `${project.name} · ${new Date().toISOString().slice(0, 10)}`)
-      const exportModel = buildRenderModel(project, view, theme, exportLabels)
+      const exportLabels = renderLabels(copy, shown, view, [project.name, new Date().toISOString().slice(0, 10), nameModeNote].filter(Boolean).join(' · '))
+      const exportModel = buildRenderModel(shown, view, theme, exportLabels)
       await exportView(format, project, exportModel, fileStem(project, viewTitle(copy, project, view)))
       say(`${copy.exported}: ${format.toUpperCase()}`)
     } catch {
       say(copy.exportFailed)
     }
-  }, [copy, project, say, theme, view])
+  }, [copy, nameModeNote, project, say, shown, theme, view])
 
   const importProject = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -479,10 +546,69 @@ export default function App() {
     setShowNew(false)
   }, [copy.newProject, replace])
 
+  const openDictionary = useCallback((tab: DictionaryTab, focusId?: string) => setDictionary({ tab, focusId }), [])
+
   const navigateFinding = useCallback((finding: Finding) => {
+    if (finding.targetKind === 'domain') { openDictionary('domains', finding.targetId); return }
+    if (finding.targetKind === 'vocabulary') { openDictionary('vocabulary', finding.targetId); return }
     if (finding.viewId && projectRef.current.views[finding.viewId]) openView(finding.viewId)
     if (finding.targetKind !== 'view' && finding.targetKind !== 'group' && finding.targetKind !== 'project') setSelectedIds(new Set([finding.targetId]))
-  }, [openView, projectRef])
+  }, [openDictionary, openView, projectRef])
+
+  /** Shows a model target from the dictionary: its scope opens behind the dictionary and the inspector selects it. */
+  const reveal = useCallback((target: RevealTarget) => {
+    const current = projectRef.current
+    if (target.kind === 'element') { openElement(target.id); return }
+    if (target.kind === 'flow') { if (openView(target.viewId)) setSelectedIds(new Set([target.id])); return }
+    const relationship = current.relationships[target.id]
+    const source = relationship ? current.elements[relationship.sourceId] : undefined
+    if (!source) return
+    openScope(scopeViewKindFor(current, source), source.parentId ?? null)
+    setSelectedIds(new Set([target.id]))
+  }, [openElement, openScope, openView, projectRef])
+
+  /** Registers a word as a term, or opens the entry that already has it, in the vocabulary tab. */
+  const registerTerm = useCallback((word: string) => {
+    const existing = findEntryByTerm(projectRef.current, word)
+    if (existing) { openDictionary('vocabulary', existing.id); return }
+    const created = addEntry(projectRef.current, word)
+    commit(() => created.project)
+    openDictionary('vocabulary', created.entry.id)
+    say(`${word} ${copy.elementAdded}`)
+  }, [commit, copy.elementAdded, openDictionary, projectRef, say])
+
+  // ---------- shared projects on the server ----------
+
+  const openShared = useCallback((projectId: string) => {
+    setSharedProjectId(projectId)
+    setProjectInUrl(projectId)
+    setCurrentViewId(null)
+    setSelectedIds(new Set())
+    setDictionary(null)
+  }, [])
+
+  const shareCurrent = useCallback(async () => {
+    try {
+      const created = await createProject(credentials, local.project.name, local.project)
+      openShared(created.id)
+      say(copy.collab.shared(created.name))
+    } catch (error) { say(error instanceof Error ? error.message : String(error)) }
+  }, [copy.collab, credentials, local.project, openShared, say])
+
+  const createBlank = useCallback(async (name: string) => {
+    try { openShared((await createProject(credentials, name)).id) } catch (error) { say(error instanceof Error ? error.message : String(error)) }
+  }, [credentials, openShared, say])
+
+  const leaveShared = useCallback((keepCopy: boolean) => {
+    if (keepCopy && collab.project) localReplace(collab.project)
+    setSharedProjectId(undefined)
+    setProjectInUrl(undefined)
+    setCurrentViewId(null)
+    setSelectedIds(new Set())
+    say(copy.collab.left)
+  }, [collab.project, copy.collab.left, localReplace, say])
+
+  const changeCredentials = useCallback((next: Credentials) => { saveCredentials(next); setCredentials(next) }, [])
 
   const copyLink = useCallback(() => {
     navigator.clipboard?.writeText(window.location.href).then(() => say(copy.linkCopied)).catch(() => undefined)
@@ -512,50 +638,19 @@ export default function App() {
         relationshipIds.forEach((id) => deleteRelationship(id))
       }
       if (event.key === 'Escape') { setSelectedIds(new Set()); setQuickCreate(false); setPendingIntermediate(null) }
-      if (event.key === 'n' && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setQuickCreate(true) }
+      if (event.key === 'n' && !event.metaKey && !event.ctrlKey && !dictionary) { event.preventDefault(); setQuickCreate(true) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [deleteElements, deleteRelationship, dfdActions, isDfd, projectRef, redo, selectedIds, undo, view.id])
+  }, [deleteElements, deleteRelationship, dfdActions, dictionary, isDfd, projectRef, redo, selectedIds, undo, view.id])
 
-  // WebMCP tool surface: the agent is another editor.
+  // WebMCP tool surface: the agent is another editor. The shared host applies edits as one undo step each; the editor adds view navigation.
   useEffect(() => registerWebMcpTools({
-    getProject: () => projectRef.current,
+    ...createToolHost({ getProject: () => projectRef.current, apply: (update) => commit(update), log: logWebMcpEdit }),
     getCurrentViewId: () => view.id,
-    listViews: () => Object.values(projectRef.current.views).map(({ id, kind, scopeId, name, isDefault }) => ({ id, kind, scopeId, name, isDefault })),
     openView,
     openScope,
-    createElement: (input) => {
-      const current = projectRef.current
-      const parent = input.parentId ? current.elements[input.parentId] : undefined
-      if (input.kind === 'container' && parent?.kind !== 'softwareSystem') return { error: 'Containers need a software system parent' }
-      if (input.kind === 'component' && parent?.kind !== 'container') return { error: 'Components need an application container parent' }
-      if (input.kind === 'entity' && !isErdStore(parent) && parent?.kind !== 'entity') return { error: 'Entities need a database or database schema container parent, or an owner entity for a dependent table' }
-      if ((input.kind === 'topic' || input.kind === 'folder') && itemKindFor(parent) !== input.kind) return { error: input.kind === 'topic' ? 'Topics need a pub/sub or queue container parent' : 'Folders need a bucket or file share container parent' }
-      const created = input.kind === 'entity'
-        ? commands.createEntity(current, { name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, classification: input.classification, storageKind: input.storageKind })
-        : commands.createElement(current, { kind: input.kind, name: input.name, description: input.description ?? '', technology: input.technology ?? '', parentId: input.parentId, containerCategory: input.containerCategory, applicationKind: input.applicationKind, dataStoreKind: input.dataStoreKind, passthrough: input.passthrough })
-      commit(() => created.project)
-      return created.element
-    },
-    updateElement: (id, patch) => { if (!projectRef.current.elements[id]) return { error: 'Unknown element' }; patchElement(id, patch); return { ...projectRef.current.elements[id], ...patch } },
-    deleteElements: (ids) => commands.deleteElements(projectRef.current, ids).deletedIds.length ? deleteElements(ids) : [],
-    createRelationship: (input) => { const current = projectRef.current; if (!current.elements[input.sourceId] || !current.elements[input.targetId]) return { error: 'Unknown endpoint' }; const erd = current.elements[input.sourceId].kind === 'entity' && current.elements[input.targetId].kind === 'entity' ? { ...defaultErdRelationship(), ...input.erd } : undefined; const { erd: _requested, ...rest } = input; const created = commands.createRelationship(current, { ...rest, ...(erd ? { erd } : {}) }); commit(() => created.project); return created.relationship },
-    addAttribute: (entityId, name, patch) => { const current = projectRef.current; if (current.elements[entityId]?.kind !== 'entity') return { error: 'Unknown entity' }; const result = commands.addAttribute(current, entityId, name, patch); commit(() => result.project); return result.attribute },
-    updateAttribute: (entityId, attributeId, patch) => { const current = projectRef.current; const attribute = current.elements[entityId]?.attributes?.find((item) => item.id === attributeId); if (!attribute) return { error: 'Unknown attribute' }; commit((state) => commands.patchAttribute(state, entityId, attributeId, patch)); return { ...attribute, ...patch } },
-    deleteAttribute: (entityId, attributeId) => { const current = projectRef.current; if (!current.elements[entityId]?.attributes?.some((item) => item.id === attributeId)) return false; commit((state) => commands.deleteAttribute(state, entityId, attributeId)); return true },
-    updateRelationship: (id, patch) => { if (!projectRef.current.relationships[id]) return { error: 'Unknown relationship' }; patchRelationship(id, patch); return { ...projectRef.current.relationships[id], ...patch } },
-    deleteRelationship,
-    arrangeView: (viewId) => runArrange(false, viewId ?? view.id),
-    findings: () => allFindings(projectRef.current),
-    createDfd: (input) => { const current = projectRef.current; if (!input.scopeId || current.elements[input.scopeId]?.kind !== 'softwareSystem') return { error: 'scopeId must be a software system: DFDs live at container level' }; const created = commands.createDfd(current, 'dfd_container', input.scopeId, input.useCase); commit(() => created.project); return created.view },
-    addDfdNode: (input) => { const current = projectRef.current; if (!isDfdView(current.views[input.viewId]?.kind ?? 'c4_context')) return { error: 'Unknown DFD' }; const added = input.elementId ? commands.addBoundNode(current, input.viewId, input.elementId) : input.role && input.name ? commands.addFreeNode(current, input.viewId, { role: input.role, name: input.name, description: input.description, intermediateKind: input.intermediateKind }) : { project: current, node: undefined }; if (!added.node) return { error: 'Provide elementId, or role and name' }; commit(() => added.project); return added.node },
-    createDfdFlow: (input) => { const current = projectRef.current; const payload = dfdOf(current.views[input.viewId] ?? { kind: 'c4_context' } as DiagramView); const source = payload.nodes[input.sourceNodeId]; const target = payload.nodes[input.targetNodeId]; if (!source || !target) return { error: 'Unknown node' }; if (connectionVerdict(source, target).kind !== 'allowed') return { error: 'Flows join a process with data or an external entity; insert intermediate data or a process between two of a kind' }; const created = commands.createFlow(current, input.viewId, input); if (!created.flow) return { error: 'Could not create flow' }; commit(() => created.project); return created.flow },
-    createBoundary: (input) => { const created = commands.createBoundary(projectRef.current, input.viewId, input.name, input.flowIds, input.consistency); if (!created.boundary) return { error: 'Unknown DFD' }; commit(() => created.project); return created.boundary },
-    linkProcesses: (input) => { const current = projectRef.current; const payload = dfdOf(current.views[input.viewId] ?? { kind: 'c4_context' } as DiagramView); if (payload.nodes[input.sourceNodeId]?.role !== 'process' || payload.nodes[input.targetNodeId]?.role !== 'process') return { error: 'Both endpoints must be process nodes of the DFD' }; const linked = commands.linkProcesses(current, input.viewId, input.sourceNodeId, input.targetNodeId, input.kind ?? 'api_document', input.name ?? (input.kind === 'api_document' || !input.kind ? copy.apiDocumentName : copy.intermediateName)); if (!linked.node) return { error: 'Could not link' }; commit(() => linked.project); return { node: linked.node, group: linked.group } },
-    placeDfdNode: (input) => { const current = projectRef.current; const result = commands.placeNode(current, input.viewId, input.nodeId, { id: 'mcp', kind: input.kind, parentId: input.parentId, patch: {} }); if (!result.element) return { error: 'Node is missing or already bound' }; commit(() => result.project); return result.element },
-    importLinks: (input) => { let next = projectRef.current; let imported = 0; for (let guard = 0; guard < 100; guard += 1) { const link = importableLinks(next, next.views[input.viewId])[0]; if (!link) break; const result = commands.importLink(next, input.viewId, link); if (!result.node) break; next = result.project; imported += 1 } commit(() => next); return { imported } },
-  }, setWebMcpReady), [commit, deleteElements, deleteRelationship, openScope, openView, patchElement, patchRelationship, projectRef, runArrange, view.id])
+  }, setWebMcpReady), [commit, openScope, openView, projectRef, view.id])
 
   const helperButton = (name: IconName, title: string, onClick: () => void, disabled = false) => (
     <button key={title} type="button" className="btn btn-ghost btn-xs join-item text-muted hover:bg-white/5 hover:text-base-content disabled:opacity-30" title={title} aria-label={title} onClick={onClick} disabled={disabled}><Icon name={name} size={14} /></button>
@@ -586,11 +681,36 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {server && (
+            <CollabBar
+              copy={copy}
+              server={server}
+              credentials={credentials}
+              onCredentials={changeCredentials}
+              session={session}
+              sessionError={sessionError}
+              sharedProjectId={collabTarget ? sharedProjectId : undefined}
+              state={collab.state}
+              participants={collab.participants}
+              activity={collab.activity}
+              readOnly={readOnly}
+              project={project}
+              views={project.views}
+              onOpenProject={openShared}
+              onShareCurrent={shareCurrent}
+              onCreateBlank={createBlank}
+              onLeave={leaveShared}
+              onUndoAgent={(actorId) => { if (sharedProjectId) undoAgent(credentials, sharedProjectId, actorId).catch((error: Error) => say(error.message)) }}
+              onOpenView={openView}
+              onDownload={() => { if (sharedProjectId) downloadProject(credentials, sharedProjectId).then((blob) => downloadBlob(blob, `${fileStem(project, 'shared')}.json`)).catch(() => say(copy.collab.downloadFailed)) }}
+            />
+          )}
           <div className={`hidden items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px] md:flex ${webMcpReady ? 'border-cyan/30 bg-cyan/5 text-cyan' : 'border-line bg-panel/60 text-muted'}`}><span className={`h-1.5 w-1.5 rounded-full ${webMcpReady ? 'bg-cyan' : 'bg-muted'}`} />WebMCP</div>
           <div className="join border border-line bg-panel/60">
             <button type="button" onClick={() => setLocale('en')} className={`btn btn-ghost btn-xs join-item ${locale === 'en' ? 'bg-cyan/15 text-cyan' : 'text-muted'}`}>EN</button>
             <button type="button" onClick={() => setLocale('ja')} className={`btn btn-ghost btn-xs join-item ${locale === 'ja' ? 'bg-cyan/15 text-cyan' : 'text-muted'}`}>JA</button>
           </div>
+          <button type="button" className={`btn btn-ghost btn-sm ${dictionary ? 'text-cyan' : 'text-muted'} hover:bg-white/5`} onClick={() => setDictionary((value) => (value ? null : { tab: 'vocabulary' }))}><Icon name="tag" size={15} /> {copy.dictionary}</button>
           <button type="button" className={`btn btn-ghost btn-sm ${showChecks ? 'text-cyan' : 'text-muted'} hover:bg-white/5`} onClick={() => setShowChecks((value) => !value)}>
             <Icon name="check" size={15} /> {copy.validate}
             {findings.some((finding) => finding.level === 'error') && <span className="ml-1 rounded-full bg-rose-500/20 px-1.5 text-[10px] text-rose-300">{findings.filter((finding) => finding.level === 'error').length}</span>}
@@ -601,6 +721,7 @@ export default function App() {
             {showExport && (
               <div className="absolute right-0 top-10 z-40 w-48 rounded-xl border border-line bg-panel p-1.5 shadow-glow" onMouseLeave={() => setShowExport(false)}>
                 {exportItems.map(([format, label]) => <button key={format} type="button" className="block w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-white/5" onClick={() => doExport(format)}>{label}</button>)}
+                <button type="button" className="block w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-white/5" onClick={exportDdl}>{volumeStoreId ? copy.exportDdlStore : copy.exportDdlAll}</button>
               </div>
             )}
           </div>
@@ -608,10 +729,20 @@ export default function App() {
         </div>
       </header>
 
+      {collabTarget && !collab.project && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-ink/70 backdrop-blur-sm">
+          <div className="rounded-xl border border-line bg-panel px-6 py-4 text-sm shadow-glow">
+            <div className="flex items-center gap-2"><span className="h-2 w-2 animate-pulse rounded-full bg-amber" />{copy.collab.connectingTo(sharedProjectId ?? '')}</div>
+            <button type="button" className="btn btn-ghost btn-xs mt-3 text-muted" onClick={() => leaveShared(false)}>{copy.collab.leave}</button>
+          </div>
+        </div>
+      )}
       <main className="grid h-[calc(100vh-60px)] grid-cols-[232px_minmax(480px,1fr)_280px]">
-        <Explorer project={project} view={view} copy={copy} search={search} onSearch={setSearch} onOpenScope={openScope} onSelectElement={(id) => { const element = project.elements[id]; if (!element) return; const scopeKind: ViewKind = scopeViewKindFor(project, element); if (view.scopeId !== (element.parentId ?? null) || view.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null); setSelectedIds(new Set([id])) }} onQuickCreate={() => setQuickCreate(true)} onOpenView={openView} notice={notice} />
+        <Explorer project={project} view={view} copy={copy} search={search} onSearch={setSearch} onOpenScope={openScope} onSelectElement={(id) => { const element = project.elements[id]; if (!element) return; const scopeKind: ViewKind = scopeViewKindFor(project, element); if (view.scopeId !== (element.parentId ?? null) || view.kind !== scopeKind) openScope(scopeKind, element.parentId ?? null); setSelectedIds(new Set([id])) }} onQuickCreate={() => setQuickCreate(true)} onOpenView={openView} onOpenCatalog={(tab) => openDictionary(tab)} notice={notice} />
 
         <section className="flex min-w-0 flex-col bg-ink/35">
+          {dictionary && <DictionaryPanel project={project} copy={copy} tab={dictionary.tab} focusId={dictionary.focusId} onNavigate={openDictionary} onClose={() => setDictionary(null)} commit={commit} onEndBatch={endBatch} onReveal={reveal} say={say} nameMode={view.nameMode ?? 'business'} findings={findings} onOpenView={openView} />}
+          {!dictionary && <>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line/80 px-5 py-2">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-xs text-muted">
@@ -676,6 +807,13 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {Object.keys(project.vocabulary).length > 0 && (
+                <div className="join border border-line bg-panel/60" title={copy.nameMode}>
+                  {NAME_MODES.map((mode) => (
+                    <button key={mode} type="button" className={`btn btn-ghost btn-xs join-item ${(view.nameMode ?? 'business') === mode ? 'bg-cyan/15 text-cyan' : 'text-muted hover:bg-white/5'}`} title={copy.nameModes[mode]} onClick={() => patchView({ nameMode: mode === 'business' ? undefined : mode })}>{copy.nameModeShort[mode]}</button>
+                  ))}
+                </div>
+              )}
               <div className="join border border-line bg-panel/60" title={copy.theme}>
                 {Object.values(THEMES).map((item) => (
                   <button key={item.id} type="button" className={`btn btn-ghost btn-xs join-item ${project.settings.styleTheme === item.id ? 'bg-cyan/15 text-cyan' : 'text-muted hover:bg-white/5'}`} onClick={() => commit((current) => ({ ...current, settings: { ...current.settings, styleTheme: item.id } }))}>
@@ -708,13 +846,15 @@ export default function App() {
               onDropElement={isDfd ? dropElement : undefined}
               pendingIntermediate={pendingIntermediate}
               onChooseIntermediate={chooseIntermediate}
+              remoteSelections={shared ? collab.participants.filter((participant) => !participant.self && participant.viewId === view.id && participant.selection.length).map((participant) => ({ name: participant.name, color: participant.color, ids: participant.selection })) : undefined}
             />
             <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
               <div className="flex items-center gap-4"><span>{copy.doubleClickToEnter}</span><span>{copy.dragToMove}</span>{isDfd && <span>{copy.dropHint}</span>}</div>
               <span>{copy.viewKinds[view.kind]} · {model.nodes.length} / {model.edges.length}</span>
             </div>
           </div>
-          {showVolume && volumeStoreId && <VolumePanel project={project} storeId={volumeStoreId} copy={copy} selectedIds={selectedIds} onSelect={(id) => setSelectedIds(new Set([id]))} onSetHorizon={setHorizon} onClose={() => setShowVolume(false)} />}
+          </>}
+          {showVolume && volumeStoreId && !dictionary && <VolumePanel project={project} storeId={volumeStoreId} copy={copy} selectedIds={selectedIds} onSelect={(id) => setSelectedIds(new Set([id]))} onSetHorizon={setHorizon} onClose={() => setShowVolume(false)} />}
           {showChecks && <ValidationPanel findings={findings} profileId={project.settings.checkProfile} copy={copy} onProfileChange={(id) => commit((current) => ({ ...current, settings: { ...current.settings, checkProfile: id } }))} onNavigate={navigateFinding} onClose={() => setShowChecks(false)} />}
         </section>
 
@@ -740,6 +880,10 @@ export default function App() {
           onOpenView={openView}
           onMaterialize={materialize}
           dfd={isDfd ? dfdActions : undefined}
+          onOpenEntry={(id) => openDictionary('vocabulary', id)}
+          onOpenDomain={(id) => openDictionary('domains', id)}
+          onRegisterTerm={registerTerm}
+          onAssignDomain={(entityId, attributeId, domainId) => commit((current) => assignDomain(current, entityId, attributeId, domainId))}
         />
       </main>
     </div>

@@ -42,6 +42,7 @@
 {"category": "constraint", "id": "decision:c4-supplementary-diagrams", "path": ".knowledge/decision/c4-supplementary-diagrams.md", "role": "supporting", "title": "C4 Supplementary Diagrams", "type": "decision"}
 {"category": "constraint", "id": "decision:checks-over-maturity", "path": ".knowledge/decision/checks-over-maturity.md", "role": "supporting", "title": "Configurable Checks Instead of Maturity Scores", "type": "decision"}
 {"category": "constraint", "id": "decision:context-level-dfd", "path": ".knowledge/decision/context-level-dfd.md", "role": "supporting", "title": "Context-Level DFD", "type": "decision"}
+{"category": "constraint", "id": "decision:crdt-collaboration", "path": ".knowledge/decision/crdt-collaboration.md", "role": "supporting", "title": "CRDT Collaboration With a Server Hub", "type": "decision"}
 {"category": "constraint", "id": "decision:dfd-component-granularity", "path": ".knowledge/decision/dfd-component-granularity.md", "role": "supporting", "title": "DFD Nodes Are Component-Level", "type": "decision"}
 {"category": "constraint", "id": "decision:dfd-container-level-only", "path": ".knowledge/decision/dfd-container-level-only.md", "role": "supporting", "title": "DFDs at Container Level Only", "type": "decision"}
 {"category": "constraint", "id": "decision:dfd-drives-c4", "path": ".knowledge/decision/dfd-drives-c4.md", "role": "supporting", "title": "DFD Flows Grow the C4 Model", "type": "decision"}

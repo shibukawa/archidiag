@@ -1,4 +1,5 @@
-import { emptyDfdPayload, emptyProject, ENTITY_CLASSIFICATIONS, isDfdView, LEGACY_CLASSIFICATIONS, makeId, SCHEMA_VERSION, type C4Level, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
+import { assignMissingDomains } from './domains'
+import { DEFAULT_NAMING_POLICY, DOMAIN_SHAPES, emptyDfdPayload, emptyProject, ENTITY_CLASSIFICATIONS, isDfdView, LEGACY_CLASSIFICATIONS, makeId, SCHEMA_VERSION, type C4Level, type DataDomain, type DiagramView, type Element, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
 import { makeView } from './views'
 
 interface LegacyElement extends Element { position?: Position }
@@ -28,28 +29,51 @@ export function parseProject(text: string): Project {
   return migrateProject(raw)
 }
 
-export function migrateProject(raw: unknown): Project {
+/**
+ * assignDomains: false keeps the result a pure function of the input, as a shared document needs; fields left
+ * without a domain are then repaired once by the server (decision: crdt-collaboration).
+ */
+export function migrateProject(raw: unknown, options: { assignDomains?: boolean } = {}): Project {
   if (!raw || typeof raw !== 'object') throw new ProjectFormatError('Not a project')
   const data = raw as LegacyProject
   if (!data.id || !data.name || typeof data.elements !== 'object' || typeof data.relationships !== 'object') throw new ProjectFormatError('Missing project fields')
   const version = data.schemaVersion ?? 1
   if (version > SCHEMA_VERSION) throw new ProjectFormatError(`Schema version ${version} is newer than supported ${SCHEMA_VERSION}`)
-  if (version >= 2) return normalize(data as unknown as Project)
-  return migrateV1(data)
+  if (version >= 2) return normalize(data as unknown as Project, options.assignDomains ?? true)
+  return assignMissingDomains(migrateV1(data))
 }
 
-function normalize(project: Project): Project {
+function normalize(project: Project, assignDomains: boolean): Project {
   const base = emptyProject(project.name)
   // v2 -> v3 is additive: entities, attributes, erd_component views, and the erd relationship record.
   // v3 -> v4 is additive: dfd_* views with their use case and payload (data:dfd-model).
-  return {
+  // v4 -> v5 is additive: vocabulary, domains, and categories; fields without a domain get their same-named one.
+  const normalized: Project = {
     ...base,
     ...project,
     schemaVersion: SCHEMA_VERSION,
     groups: project.groups ?? {},
     views: Object.fromEntries(Object.entries(project.views ?? {}).filter(([, view]) => KNOWN_KINDS.has(view.kind)).map(([id, view]) => [id, normalizeView({ ...makeView(view.kind, view.scopeId, view.name, view.isDefault), ...view, id, layout: { positions: view.layout?.positions ?? {}, boundary: view.layout?.boundary } })])),
-    settings: { ...base.settings, ...project.settings },
+    settings: { ...base.settings, ...project.settings, namingPolicy: { ...DEFAULT_NAMING_POLICY, ...project.settings?.namingPolicy } },
     elements: Object.fromEntries(Object.entries(project.elements).map(([id, element]) => [id, normalizeElement(stripLegacy(element as LegacyElement))])),
+    vocabulary: Object.fromEntries(Object.entries(project.vocabulary ?? {}).map(([id, entry]) => [id, { ...entry, id, businessName: entry.businessName ?? '', systemName: entry.systemName ?? '', physicalName: entry.physicalName ?? '', meaning: entry.meaning ?? '', notes: entry.notes ?? '', aliases: Array.isArray(entry.aliases) ? entry.aliases.filter((alias) => typeof alias === 'string') : [] }])),
+    domainCategories: Object.fromEntries(Object.entries(project.domainCategories ?? {}).map(([id, category]) => [id, { id, name: category.name ?? '' }])),
+    domains: Object.fromEntries(Object.entries(project.domains ?? {}).map(([id, domain]) => [id, normalizeDomain({ ...domain, id })])),
+  }
+  return assignDomains ? assignMissingDomains(normalized) : normalized
+}
+
+function normalizeDomain(domain: DataDomain): DataDomain {
+  const shape = DOMAIN_SHAPES.includes(domain.shape) ? domain.shape : 'unresolved'
+  return {
+    ...domain,
+    name: domain.name ?? '',
+    description: domain.description ?? '',
+    origin: domain.origin === 'dictionary' ? 'dictionary' : 'from_field',
+    curated: Boolean(domain.curated),
+    shape,
+    components: domain.components?.map((component) => ({ ...component, id: component.id ?? makeId('dcomp'), name: component.name ?? '', required: component.required ?? true, description: component.description ?? '' })),
+    codeSet: domain.codeSet ? { base: domain.codeSet.base ?? { primitive: 'varchar' }, entries: (domain.codeSet.entries ?? []).map((entry) => ({ ...entry, id: entry.id ?? makeId('code'), name: entry.name ?? '', value: entry.value ?? '', description: entry.description ?? '' })) } : undefined,
   }
 }
 
@@ -68,7 +92,8 @@ function normalizeView(view: DiagramView): DiagramView {
 
 function normalizeElement(element: Element): Element {
   if (element.kind !== 'entity') return element
-  const attributes = (element.attributes ?? []).map((attribute) => ({ id: attribute.id ?? makeId('attr'), name: attribute.name ?? '', description: attribute.description ?? '', important: Boolean(attribute.important), primaryKey: Boolean(attribute.primaryKey), required: Boolean(attribute.required), unique: Boolean(attribute.unique) }))
+  // Keys this build does not know stay, so a newer editor's fields survive a round trip.
+  const attributes = (element.attributes ?? []).map((attribute) => ({ ...attribute, id: attribute.id ?? makeId('attr'), name: attribute.name ?? '', description: attribute.description ?? '', important: Boolean(attribute.important), primaryKey: Boolean(attribute.primaryKey), required: Boolean(attribute.required), unique: Boolean(attribute.unique), ...(attribute.domainId ? { domainId: attribute.domainId } : {}), ...(attribute.useDomainName ? { useDomainName: true } : {}) }))
   const raw = element.classification as string | undefined
   const classification = raw ? (ENTITY_CLASSIFICATIONS.includes(raw as never) ? element.classification : LEGACY_CLASSIFICATIONS[raw]) : undefined
   // Entities carry no free technology text (decision: storage-kind-as-technology).
@@ -136,6 +161,9 @@ export function serializeProject(project: Project): string {
     relationships: sortRecord(project.relationships),
     groups: sortRecord(project.groups),
     views: sortRecord(project.views),
+    vocabulary: sortRecord(project.vocabulary),
+    domainCategories: sortRecord(project.domainCategories),
+    domains: sortRecord(project.domains),
   }
   return JSON.stringify(ordered, null, 2)
 }

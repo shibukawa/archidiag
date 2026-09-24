@@ -15,6 +15,8 @@ export interface ExplorerProps {
   onSelectElement: (id: string) => void
   onQuickCreate: () => void
   onOpenView: (viewId: string) => void
+  /** Opens a project catalog: vocabulary, domains, tables, or DFDs (requirement: project-catalogs). */
+  onOpenCatalog: (tab: 'vocabulary' | 'domains' | 'tables' | 'dfds') => void
   notice: string
 }
 
@@ -29,7 +31,7 @@ const iconFor = (element: Element): IconName => {
   return effectiveCategory(element) === 'dataStore' ? 'database' : 'box'
 }
 
-export function Explorer({ project, view, copy, search, onSearch, onOpenScope, onSelectElement, onQuickCreate, onOpenView, notice }: ExplorerProps) {
+export function Explorer({ project, view, copy, search, onSearch, onOpenScope, onSelectElement, onQuickCreate, onOpenView, onOpenCatalog, notice }: ExplorerProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const toggle = (id: string) => setCollapsed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
   const matches = (element: Element) => !search || `${element.name} ${element.description} ${element.technology}`.toLowerCase().includes(search.toLowerCase())
@@ -130,7 +132,13 @@ export function Explorer({ project, view, copy, search, onSearch, onOpenScope, o
           </div>
         )}
       </div>
-      <div className="border-t border-line/80 p-3">
+      <div className="flex flex-wrap items-center gap-1 border-t border-line/80 px-3 pt-2 text-[11px]">
+        <span className="mr-1 text-[10px] uppercase tracking-wider text-muted">{copy.dictionary}</span>
+        {(['vocabulary', 'domains', 'tables', 'dfds'] as const).map((tab) => (
+          <button key={tab} type="button" className="rounded px-1.5 py-0.5 text-muted hover:bg-white/5 hover:text-cyan" onClick={() => onOpenCatalog(tab)}>{{ vocabulary: copy.dict.vocabulary, domains: copy.dict.domains, tables: copy.catalog.tables, dfds: copy.catalog.dfds }[tab]} <span className="opacity-60">{{ vocabulary: Object.keys(project.vocabulary).length, domains: Object.keys(project.domains).length, tables: Object.values(project.elements).filter((element) => element.kind === 'entity').length, dfds: dfdViews(project).length }[tab]}</span></button>
+        ))}
+      </div>
+      <div className="p-3 pt-2">
         <div className="flex items-center gap-2 rounded-lg bg-ink/40 px-3 py-2 text-[11px] text-muted"><span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" /><span className="truncate">{notice}</span></div>
       </div>
     </aside>

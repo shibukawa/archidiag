@@ -1,6 +1,6 @@
 // Runtime-neutral project model. No DOM, React, or Bun APIs here.
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export type ElementKind = 'person' | 'softwareSystem' | 'externalSystem' | 'container' | 'component' | 'entity' | 'topic' | 'folder'
 /** Store items: the component-level children of non-SQL data stores (data:store-item). */
@@ -105,7 +105,99 @@ export interface Attribute {
   primaryKey: boolean
   required: boolean
   unique: boolean
+  /** The type authority (data:data-domain); a field gets a same-named domain when created (decision: field-first-domains). */
+  domainId?: string
+  /** The effective name is name + domain name, so an empty name is allowed (data:attribute use_domain_name). */
+  useDomainName?: boolean
 }
+
+// ---------- vocabulary (data:vocabulary-entry) ----------
+
+export interface VocabularyEntry {
+  id: string
+  businessName: string
+  systemName: string
+  physicalName: string
+  /** Required only under a plural table naming policy; never derived (rule: physical-naming-policy). */
+  physicalNamePlural?: string
+  meaning: string
+  notes: string
+  /** Synonyms that resolve to this entry but stay flagged for correction. */
+  aliases: string[]
+  /** Whitelists an entry that intentionally deviates from the naming policy. */
+  policyException?: boolean
+}
+
+export type IdentifierCase = 'snake_case' | 'camelCase' | 'PascalCase'
+export const IDENTIFIER_CASES: IdentifierCase[] = ['snake_case', 'camelCase', 'PascalCase']
+export type TableNumber = 'singular' | 'plural'
+
+/** One naming policy per project; it governs suggestions and findings, never stored physical names. */
+export interface NamingPolicy {
+  identifierCase: IdentifierCase
+  tableNumber: TableNumber
+  /** How names in the business language become system and physical names when no term covers them. */
+  transliteration: Transliteration
+}
+
+export type Transliteration = 'translate' | 'romaji_hepburn' | 'romaji_kunrei'
+export const TRANSLITERATIONS: Transliteration[] = ['translate', 'romaji_hepburn', 'romaji_kunrei']
+
+/** Label forms a diagram can show (requirement: name-display-switching). */
+export type NameMode = 'business' | 'system' | 'physical' | 'system_and_physical'
+export const NAME_MODES: NameMode[] = ['business', 'system', 'physical', 'system_and_physical']
+
+// ---------- data domains (data:data-domain) ----------
+
+/** Canonical PostgreSQL base types (data:primitive-type); other dialects render them at export. */
+export type PrimitiveKind = 'smallint' | 'integer' | 'bigint' | 'numeric' | 'real' | 'double_precision' | 'varchar' | 'text' | 'bytea' | 'date' | 'time' | 'timestamp' | 'timestamptz' | 'boolean' | 'uuid' | 'jsonb'
+export const PRIMITIVE_KINDS: PrimitiveKind[] = ['smallint', 'integer', 'bigint', 'numeric', 'real', 'double_precision', 'varchar', 'text', 'bytea', 'date', 'time', 'timestamp', 'timestamptz', 'boolean', 'uuid', 'jsonb']
+export const CODE_SET_BASES: PrimitiveKind[] = ['varchar', 'integer', 'numeric']
+
+export interface TypeSpec {
+  primitive: PrimitiveKind
+  /** varchar */
+  length?: number
+  /** numeric */
+  precision?: number
+  scale?: number
+}
+
+export type DomainShape = 'unresolved' | 'single_field' | 'multi_field' | 'code_set'
+export const DOMAIN_SHAPES: DomainShape[] = ['unresolved', 'single_field', 'multi_field', 'code_set']
+export type DomainOrigin = 'from_field' | 'dictionary'
+
+/** One ordered member of a multi-field domain (data:domain-component). */
+export interface DomainComponent {
+  id: string
+  name: string
+  /** A primitive type, or a defined single-field domain through domainRef. */
+  type?: TypeSpec
+  domainRef?: string
+  required: boolean
+  description: string
+}
+
+export interface CodeSetEntry { id: string; name: string; value: string; description: string }
+
+/** Ordered named values backed by one scalar base type; never a native enum (data:code-set). */
+export interface CodeSet { base: TypeSpec; entries: CodeSetEntry[] }
+
+export interface DataDomain {
+  id: string
+  name: string
+  description: string
+  categoryId?: string
+  origin: DomainOrigin
+  /** False for automatic domains until an author types, categorizes, merges into, or describes them. */
+  curated: boolean
+  shape: DomainShape
+  type?: TypeSpec
+  components?: DomainComponent[]
+  codeSet?: CodeSet
+}
+
+export interface DomainCategory { id: string; name: string }
 
 export interface Element {
   id: string
@@ -123,6 +215,8 @@ export interface Element {
   passthrough?: boolean
   /** Containers only: the system's "Unknown container", created on demand for components placed from a DFD (decision: dfd-drives-c4). */
   placeholder?: boolean
+  /** C4 elements only: opt the name into vocabulary binding and name display switching (decision: vocabulary-binding-scope). */
+  vocabularyBound?: boolean
   /** Entities only. */
   classification?: EntityClassification
   storageKind?: EntityStorage
@@ -263,6 +357,8 @@ export interface DiagramView {
   /** Subset of the scope's elements shown in this view. Empty means every element of the scope. */
   elementRefs: string[]
   displayMode: DisplayMode
+  /** Name form for bound labels; absent means business, the names as typed. */
+  nameMode?: NameMode
   layout: ViewLayout
   /** dfd_* views: the scenario the diagram follows, for example "Place order". */
   useCase?: string
@@ -275,6 +371,7 @@ export interface ProjectSettings {
   checkProfile: string
   /** Horizon for data volume estimates (data:entity-volume). */
   volumeHorizonMonths: number
+  namingPolicy: NamingPolicy
 }
 
 export interface Project {
@@ -285,8 +382,13 @@ export interface Project {
   relationships: Record<string, Relationship>
   groups: Record<string, Group>
   views: Record<string, DiagramView>
+  vocabulary: Record<string, VocabularyEntry>
+  domains: Record<string, DataDomain>
+  domainCategories: Record<string, DomainCategory>
   settings: ProjectSettings
 }
+
+export const DEFAULT_NAMING_POLICY: NamingPolicy = { identifierCase: 'snake_case', tableNumber: 'singular', transliteration: 'translate' }
 
 export const VIEW_KIND_BY_LEVEL: Record<C4Level, ViewKind> = {
   context: 'c4_context',
@@ -505,6 +607,9 @@ export function emptyProject(name = 'Untitled'): Project {
     relationships: {},
     groups: {},
     views: {},
-    settings: { styleTheme: 'compact', checkProfile: 'container_sketch', volumeHorizonMonths: DEFAULT_VOLUME_HORIZON_MONTHS },
+    vocabulary: {},
+    domains: {},
+    domainCategories: {},
+    settings: { styleTheme: 'compact', checkProfile: 'container_sketch', volumeHorizonMonths: DEFAULT_VOLUME_HORIZON_MONTHS, namingPolicy: { ...DEFAULT_NAMING_POLICY } },
   }
 }

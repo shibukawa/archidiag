@@ -4,6 +4,7 @@ import { CRUD_OPERATIONS, INTERMEDIATE_KINDS, type Consistency, type CrudOperati
 import { dfdLabel, roleLabel, type Copy } from './i18n'
 import { Icon } from './icons'
 import { Field, RadioRow } from './Inspector'
+import { TermChips } from './VocabularyBits'
 
 /** Everything the DFD editors can do; App implements it over the pure commands. */
 export interface DfdActions {
@@ -23,6 +24,8 @@ export interface DfdActions {
   importAllLinks: () => void
   addDiagramRef: (targetViewId: string) => void
   openView: (viewId: string) => void
+  /** Opens a vocabulary entry mentioned in a flow label. */
+  openEntry: (entryId: string) => void
   groupMembers: (memberIds: string[]) => void
   patchGroup: (groupId: string, patch: Partial<DfdGroup>, batchKey?: string) => void
   ungroup: (groupId: string) => void
@@ -270,6 +273,7 @@ export function FlowEditor({ project, view, payload, flow, copy, actions, onSele
         <button type="button" className="hover:text-cyan" onClick={() => target && onSelect(target.id)}>{target ? nodeName(project, target) : '?'}</button>
       </div>
       <Field label={copy.label}><input className="inspector-input" value={flow.label} onChange={(event) => actions.patchFlow(flow.id, { label: event.target.value }, `${flow.id}:label`)} onBlur={onEndBatch} /></Field>
+      <TermChips project={project} texts={[flow.label, flow.description]} copy={copy} onOpenEntry={actions.openEntry} />
       <Field label={copy.dataRefs}>
         <div className="mb-1 flex flex-wrap gap-1">
           {flow.dataRefs.map((item) => (

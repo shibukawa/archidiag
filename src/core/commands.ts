@@ -1,10 +1,16 @@
 // Pure project commands. Each returns a new project; the UI wraps them in history.
 import { defaultOperations, descendantNodeIds, dfdOf, groupOf, groupUnits, importableLinks, nextProcessNumber, nodeName, PLACEHOLDER_CONTAINER_NAME, representativeOf, roleForElement, startNodeOf, storeTargetOf, type ImportableLink, type PlacementOption } from './dfd'
 import { childrenOf, defaultAttributesFor, dependentRelationship, emptyDfdPayload, isDfdView, isScreenComponent, makeAttribute, makeId, type Attribute, type Consistency, type DfdBoundary, type DfdFlow, type DfdGroup, type DfdNode, type DfdPayload, type DfdRole, type DiagramView, type Element, type Group, type IntermediateKind, type Position, type Project, type Rect, type Relationship, type ViewKind } from './model'
+import { pruneDomains, syncAttributeDomains } from './domains'
 import { makeView } from './views'
 
+/** Stores an element; an entity's changed field list keeps its fields on domains (decision: field-first-domains). */
 export function upsertElement(project: Project, element: Element): Project {
-  return { ...project, elements: { ...project.elements, [element.id]: element } }
+  const previous = project.elements[element.id]
+  if (element.kind !== 'entity' || !element.attributes || previous?.attributes === element.attributes) return { ...project, elements: { ...project.elements, [element.id]: element } }
+  const synced = syncAttributeDomains(project, previous?.attributes ?? [], element.attributes)
+  const next = { ...synced.project, elements: { ...synced.project.elements, [element.id]: { ...element, attributes: synced.attributes } } }
+  return pruneDomains(next, synced.released)
 }
 
 export function patchElement(project: Project, id: string, patch: Partial<Element>): Project {
@@ -39,7 +45,8 @@ export function deleteElements(project: Project, ids: string[]): { project: Proj
       // A DFD keeps its picture: nodes bound to a deleted element become free nodes carrying the old name (decision: dfd-first-free-nodes).
       dfd: view.dfd ? { ...view.dfd, nodes: Object.fromEntries(Object.entries(view.dfd.nodes).map(([nodeId, node]) => [nodeId, node.elementId && toDelete.has(node.elementId) ? { ...node, elementId: undefined, name: project.elements[node.elementId]?.name ?? node.name } : node])) } : undefined,
     }]))
-  return { project: { ...project, elements, relationships, groups, views }, deletedIds: [...toDelete] }
+  const released = [...toDelete].flatMap((id) => (project.elements[id]?.attributes ?? []).map((attribute) => attribute.domainId ?? ''))
+  return { project: pruneDomains({ ...project, elements, relationships, groups, views }, released), deletedIds: [...toDelete] }
 }
 
 export function createRelationship(project: Project, input: Omit<Relationship, 'id'> & { id?: string }): { project: Project; relationship: Relationship } {

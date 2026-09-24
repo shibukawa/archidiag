@@ -20,5 +20,5 @@ guarantees:
   - ordered or revision-addressable operations
   - server-side authorization when a service exists
   - no dependency from the static baseline on this API
-reference_implementation: system:bun-server over WebSocket; operations persist to data:project-store
+reference_implementation: system:bun-server over WebSocket speaking the Yjs sync and awareness protocol (decision:crdt-collaboration); updates persist to data:project-store
 ```

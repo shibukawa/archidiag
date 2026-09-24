@@ -45,6 +45,7 @@
 {"context": "body", "path": ".knowledge/api/ai-tool-surface.md", "source": "api:ai-tool-surface", "target": "data:edit-operation", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/api/collaboration-gateway.md", "source": "api:collaboration-gateway", "target": "data:edit-operation", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/api/collaboration-gateway.md", "source": "api:collaboration-gateway", "target": "system:bun-server", "target_category": "external", "target_type": "system"}
+{"context": "body", "path": ".knowledge/api/collaboration-gateway.md", "source": "api:collaboration-gateway", "target": "decision:crdt-collaboration", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/api/collaboration-gateway.md", "source": "api:collaboration-gateway", "target": "data:project-store", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/api/mcp-server.md", "source": "api:mcp-server", "target": "api:ai-tool-surface", "target_category": "interface", "target_type": "api"}
 {"context": "body", "path": ".knowledge/api/mcp-server.md", "source": "api:mcp-server", "target": "data:webmcp-tool-contract", "target_category": "structure", "target_type": "data"}
@@ -182,7 +183,7 @@
 {"context": "body", "path": ".knowledge/data/project-store.md", "source": "data:project-store", "target": "decision:yaml-on-disk-json-in-browser", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/data/project-store.md", "source": "data:project-store", "target": "data:diagram-view", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/data/project-store.md", "source": "data:project-store", "target": "data:review-thread", "target_category": "structure", "target_type": "data"}
-{"context": "body", "path": ".knowledge/data/project-store.md", "source": "data:project-store", "target": "data:edit-operation", "target_category": "structure", "target_type": "data"}
+{"context": "body", "path": ".knowledge/data/project-store.md", "source": "data:project-store", "target": "decision:crdt-collaboration", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/data/project-store.md", "source": "data:project-store", "target": "requirement:project-portability", "target_category": "objective", "target_type": "requirement"}
 {"context": "body", "path": ".knowledge/data/review-thread.md", "source": "data:review-thread", "target": "decision:review-comments-separate", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/data/review-thread.md", "source": "data:review-thread", "target": "requirement:deep-links", "target_category": "objective", "target_type": "requirement"}
@@ -220,6 +221,15 @@
 {"context": "body", "path": ".knowledge/decision/context-level-dfd.md", "source": "decision:context-level-dfd", "target": "decision:dfd-container-level-only", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/decision/context-level-dfd.md", "source": "decision:context-level-dfd", "target": "data:dfd-diagram-ref", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/decision/context-level-dfd.md", "source": "decision:context-level-dfd", "target": "rule:dfd-c4-pairing", "target_category": "constraint", "target_type": "rule"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "system:bun-server", "target_category": "external", "target_type": "system"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "decision:server-authority-when-present", "target_category": "constraint", "target_type": "decision"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "data:c4-project", "target_category": "structure", "target_type": "data"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "decision:shared-typescript-core", "target_category": "constraint", "target_type": "decision"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "rule:c4-model-integrity", "target_category": "constraint", "target_type": "rule"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "data:project-store", "target_category": "structure", "target_type": "data"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "api:mcp-server", "target_category": "interface", "target_type": "api"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "rule:undo-scope", "target_category": "constraint", "target_type": "rule"}
+{"context": "body", "path": ".knowledge/decision/crdt-collaboration.md", "source": "decision:crdt-collaboration", "target": "api:collaboration-gateway", "target_category": "interface", "target_type": "api"}
 {"context": "body", "path": ".knowledge/decision/dfd-component-granularity.md", "source": "decision:dfd-component-granularity", "target": "decision:dfd-container-level-only", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/decision/dfd-component-granularity.md", "source": "decision:dfd-component-granularity", "target": "decision:dfd-drives-c4", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/decision/dfd-component-granularity.md", "source": "decision:dfd-component-granularity", "target": "data:entity", "target_category": "structure", "target_type": "data"}
@@ -314,6 +324,7 @@
 {"context": "body", "path": ".knowledge/decision/review-comments-separate.md", "source": "decision:review-comments-separate", "target": "requirement:deep-links", "target_category": "objective", "target_type": "requirement"}
 {"context": "body", "path": ".knowledge/decision/review-comments-separate.md", "source": "decision:review-comments-separate", "target": "requirement:review-comments", "target_category": "objective", "target_type": "requirement"}
 {"context": "body", "path": ".knowledge/decision/server-authority-when-present.md", "source": "decision:server-authority-when-present", "target": "system:bun-server", "target_category": "external", "target_type": "system"}
+{"context": "body", "path": ".knowledge/decision/server-authority-when-present.md", "source": "decision:server-authority-when-present", "target": "decision:crdt-collaboration", "target_category": "constraint", "target_type": "decision"}
 {"context": "body", "path": ".knowledge/decision/server-authority-when-present.md", "source": "decision:server-authority-when-present", "target": "data:edit-operation", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/decision/server-authority-when-present.md", "source": "decision:server-authority-when-present", "target": "data:project-store", "target_category": "structure", "target_type": "data"}
 {"context": "body", "path": ".knowledge/decision/server-authority-when-present.md", "source": "decision:server-authority-when-present", "target": "flow:collaborative-editing", "target_category": "behavior", "target_type": "flow"}

@@ -24,6 +24,8 @@ export interface CanvasProps {
   /** A process-to-process link awaits the choice of file or queue (rule: dfd-connection-policy). */
   pendingIntermediate?: { sourceId: string; targetId: string } | null
   onChooseIntermediate?: (kind: IntermediateKind | null) => void
+  /** What other participants of a shared session selected in this view, outlined in their color. */
+  remoteSelections?: Array<{ name: string; color: string; ids: string[] }>
 }
 
 /** MIME type of an element id dragged out of the explorer. */
@@ -46,7 +48,7 @@ function capture(element: Element | null, pointerId: number) {
 }
 interface LinkDrag { pointerId: number; sourceId: string; from: Position; to: Position; hoverId?: string }
 
-export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPreview, onCommitPositions, onCommitBoundary, onConnect, onBackgroundDoubleClick, onZoom, onDropElement, pendingIntermediate, onChooseIntermediate }: CanvasProps) {
+export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPreview, onCommitPositions, onCommitBoundary, onConnect, onBackgroundDoubleClick, onZoom, onDropElement, pendingIntermediate, onChooseIntermediate, remoteSelections }: CanvasProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -325,6 +327,20 @@ export function Canvas({ model, zoom, selectedIds, copy, onSelect, onEnter, onPr
         <div className="relative" style={{ width: width * zoom, height: height * zoom }}>
           <div className="absolute left-0 top-0 select-none" style={{ width, height, transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
             <div className="absolute inset-0" dangerouslySetInnerHTML={{ __html: svg }} />
+            {remoteSelections && remoteSelections.length > 0 && (
+              <svg className="pointer-events-none absolute inset-0 overflow-visible" width={width} height={height}>
+                {remoteSelections.flatMap((participant, index) => participant.ids.map((id) => nodeById.get(id)).filter(Boolean).map((node, position) => {
+                  const rect = node!.rect
+                  const inset = 5 + index * 3
+                  return (
+                    <g key={`${participant.name}-${node!.id}`}>
+                      <rect x={rect.x - inset} y={rect.y - inset} width={rect.width + inset * 2} height={rect.height + inset * 2} rx="12" fill="none" stroke={participant.color} strokeWidth="2" strokeDasharray="5 3" />
+                      {position === 0 && <text x={rect.x - inset} y={rect.y - inset - 4} fill={participant.color} fontSize="11" fontWeight="700">{participant.name}</text>}
+                    </g>
+                  )
+                }))}
+              </svg>
+            )}
             {linkDrag && (
               <svg className="pointer-events-none absolute inset-0 overflow-visible" width={width} height={height}>
                 <path d={`M ${linkDrag.from.x} ${linkDrag.from.y} L ${linkDrag.to.x} ${linkDrag.to.y}`} stroke="#2563eb" strokeWidth="2" strokeDasharray="6 4" fill="none" />
